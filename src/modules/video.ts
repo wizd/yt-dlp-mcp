@@ -104,14 +104,29 @@ export async function downloadVideo(
     
     // Download with progress info
     try {
-      await _spawnPromise("yt-dlp", [
+      const args = [
         "--progress",
         "--newline",
         "--no-mtime",
-        "-f", format,
-        "--output", outputTemplate,
-        url
-      ]);
+        "-f",
+        format,
+        "--output",
+        outputTemplate,
+      ];
+
+      // 如果是YouTube视频，添加cookies以通过bot验证
+      if (isYouTubeUrl(url)) {
+        const cookiePath = path.resolve(
+          new URL(import.meta.url).pathname,
+          "../yt-cookies.txt"
+        );
+        args.push("--cookies", cookiePath);
+      }
+
+      console.log("args is:", args);
+      args.push(url);
+
+      await _spawnPromise("yt-dlp", args);
     } catch (error) {
       throw new Error(`Download failed: ${error instanceof Error ? error.message : String(error)}`);
     }

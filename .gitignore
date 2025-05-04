@@ -33,3 +33,5 @@ test-dist
 .idea/
 
 dist/
+
+src/modules/yt-cookies.txt
