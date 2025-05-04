@@ -43,15 +43,29 @@ export async function downloadAudio(url: string, config: Config): Promise<string
       ? "140/bestaudio[ext=m4a]/bestaudio"
       : "bestaudio[ext=m4a]/bestaudio[ext=mp3]/bestaudio";
 
-    await _spawnPromise("yt-dlp", [
+    const args = [
       "--verbose",
       "--progress",
       "--newline",
       "--no-mtime",
-      "-f", format,
-      "--output", outputTemplate,
-      url
-    ]);
+      "-f",
+      format,
+      "--output",
+      outputTemplate,
+    ];
+
+    // 如果是YouTube视频，添加cookies以通过bot验证
+    if (isYouTubeUrl(url)) {
+      const cookiePath = path.resolve(
+        new URL(import.meta.url).pathname,
+        "../yt-cookies.txt"
+      );
+      args.push("--cookies", cookiePath);
+    }
+
+    args.push(url);
+
+    await _spawnPromise("yt-dlp", args);
 
     const files = readdirSync(config.file.downloadsDir);
     const downloadedFile = files.find(file => file.includes(timestamp));

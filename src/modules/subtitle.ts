@@ -2,15 +2,15 @@ import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
 import type { Config } from '../config.js';
-import { _spawnPromise, validateUrl } from "./utils.js";
+import { _spawnPromise, validateUrl, isYouTubeUrl } from "./utils.js";
 
 /**
  * Lists all available subtitles for a video.
- * 
+ *
  * @param url - The URL of the video
  * @returns Promise resolving to a string containing the list of available subtitles
  * @throws {Error} When URL is invalid or subtitle listing fails
- * 
+ *
  * @example
  * ```typescript
  * try {
@@ -23,17 +23,29 @@ import { _spawnPromise, validateUrl } from "./utils.js";
  */
 export async function listSubtitles(url: string): Promise<string> {
   if (!validateUrl(url)) {
-    throw new Error('Invalid or unsupported URL format');
+    throw new Error("Invalid or unsupported URL format");
   }
 
   try {
-    const output = await _spawnPromise('yt-dlp', [
-      '--list-subs',
-      '--write-auto-sub',
-      '--skip-download',
-      '--verbose',
-      url
-    ]);
+    const args = [
+      "--list-subs",
+      "--write-auto-sub",
+      "--skip-download",
+      "--verbose",
+    ];
+
+    // 如果是YouTube视频，添加cookies以通过bot验证
+    if (isYouTubeUrl(url)) {
+      const cookiePath = path.resolve(
+        new URL(import.meta.url).pathname,
+        "../yt-cookies.txt"
+      );
+      args.push("--cookies", cookiePath);
+    }
+
+    args.push(url);
+
+    const output = await _spawnPromise("yt-dlp", args);
     return output;
   } catch (error) {
     throw error;
@@ -80,14 +92,28 @@ export async function downloadSubtitles(
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), config.file.tempDirPrefix));
 
   try {
-    await _spawnPromise('yt-dlp', [
-      '--write-sub',
-      '--write-auto-sub',
-      '--sub-lang', language,
-      '--skip-download',
-      '--output', path.join(tempDir, '%(title)s.%(ext)s'),
-      url
-    ]);
+    const args = [
+      "--write-sub",
+      "--write-auto-sub",
+      "--sub-lang",
+      language,
+      "--skip-download",
+      "--output",
+      path.join(tempDir, "%(title)s.%(ext)s"),
+    ];
+
+    // 如果是YouTube视频，添加cookies以通过bot验证
+    if (isYouTubeUrl(url)) {
+      const cookiePath = path.resolve(
+        new URL(import.meta.url).pathname,
+        "../yt-cookies.txt"
+      );
+      args.push("--cookies", cookiePath);
+    }
+
+    args.push(url);
+
+    await _spawnPromise("yt-dlp", args);
 
     const subtitleFiles = fs.readdirSync(tempDir)
       .filter(file => file.endsWith('.vtt'));

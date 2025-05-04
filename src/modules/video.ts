@@ -123,7 +123,6 @@ export async function downloadVideo(
         args.push("--cookies", cookiePath);
       }
 
-      console.log("args is:", args);
       args.push(url);
 
       await _spawnPromise("yt-dlp", args);
