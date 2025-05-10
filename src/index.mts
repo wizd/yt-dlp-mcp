@@ -301,6 +301,7 @@ async function runServer() {
         const downloadsDir = path.join(os.homedir(), "Downloads");
         const filePath = path.join(downloadsDir, sanitizedFilename);
 
+        console.log("want to download file from:", filePath);
         // Check if file exists and then send
         if (fs.existsSync(filePath)) {
           res.download(filePath, sanitizedFilename, (err) => {
