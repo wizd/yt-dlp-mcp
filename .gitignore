@@ -35,3 +35,4 @@ test-dist
 dist/
 
 src/modules/yt-cookies.txt
+.env

@@ -16,8 +16,24 @@ import { _spawnPromise, safeCleanup } from "./modules/utils.js";
 import { downloadVideo } from "./modules/video.js";
 import { downloadAudio } from "./modules/audio.js";
 import { listSubtitles, downloadSubtitles } from "./modules/subtitle.js";
+import { RestServerTransport } from "@wizdy/typescript-sdk/server/rest.js";
+import { getParamValue } from "@wizdy/typescript-sdk/utils/index.js";
+import dotenv from "dotenv";
 
-const VERSION = '0.6.26';
+// 加载环境变量
+dotenv.config();
+
+const VERSION = "0.6.26";
+
+const mode = getParamValue("MODE") || "stdio";
+const port = getParamValue("PORT") || 9591;
+const endpoint = getParamValue("ENDPOINT") || "/rest";
+const apiKey = process.env.API_KEY || "";
+
+console.log("mode", mode);
+console.log("port", port);
+console.log("endpoint", endpoint);
+console.log("apiKey", apiKey);
 
 /**
  * Validate system configuration
@@ -26,21 +42,27 @@ const VERSION = '0.6.26';
 async function validateConfig(): Promise<void> {
   // Check downloads directory
   if (!fs.existsSync(CONFIG.file.downloadsDir)) {
-    throw new Error(`Downloads directory does not exist: ${CONFIG.file.downloadsDir}`);
+    throw new Error(
+      `Downloads directory does not exist: ${CONFIG.file.downloadsDir}`
+    );
   }
 
   // Check downloads directory permissions
   try {
-    const testFile = path.join(CONFIG.file.downloadsDir, '.write-test');
-    fs.writeFileSync(testFile, '');
+    const testFile = path.join(CONFIG.file.downloadsDir, ".write-test");
+    fs.writeFileSync(testFile, "");
     fs.unlinkSync(testFile);
   } catch (error) {
-    throw new Error(`No write permission in downloads directory: ${CONFIG.file.downloadsDir}`);
+    throw new Error(
+      `No write permission in downloads directory: ${CONFIG.file.downloadsDir}`
+    );
   }
 
   // Check temporary directory permissions
   try {
-    const testDir = fs.mkdtempSync(path.join(os.tmpdir(), CONFIG.file.tempDirPrefix));
+    const testDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), CONFIG.file.tempDirPrefix)
+    );
     await safeCleanup(testDir);
   } catch (error) {
     throw new Error(`Cannot create temporary directory in: ${os.tmpdir()}`);
@@ -56,7 +78,9 @@ async function checkDependencies(): Promise<void> {
     try {
       await _spawnPromise(tool, ["--version"]);
     } catch (error) {
-      throw new Error(`Required tool '${tool}' is not installed or not accessible`);
+      throw new Error(
+        `Required tool '${tool}' is not installed or not accessible`
+      );
     }
   }
 }
@@ -66,7 +90,7 @@ async function checkDependencies(): Promise<void> {
  */
 async function initialize(): Promise<void> {
   // 在測試環境中跳過初始化檢查
-  if (process.env.NODE_ENV === 'test') {
+  if (process.env.NODE_ENV === "test") {
     return;
   }
 
@@ -74,7 +98,7 @@ async function initialize(): Promise<void> {
     await validateConfig();
     await checkDependencies();
   } catch (error) {
-    console.error('Initialization failed:', error);
+    console.error("Initialization failed:", error);
     process.exit(1);
   }
 }
@@ -86,7 +110,10 @@ const server = new Server(
   },
   {
     capabilities: {
-      tools: {}
+      tools: {
+        list: true,
+        call: true,
+      },
     },
   }
 );
@@ -99,7 +126,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
     tools: [
       {
         name: "list_subtitle_languages",
-        description: "List all available subtitle languages and their formats for a video (including auto-generated captions)",
+        description:
+          "List all available subtitle languages and their formats for a video (including auto-generated captions)",
         inputSchema: {
           type: "object",
           properties: {
@@ -110,12 +138,17 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "download_video_subtitles",
-        description: "Download video subtitles in any available format. Supports both regular and auto-generated subtitles in various languages.",
+        description:
+          "Download video subtitles in any available format. Supports both regular and auto-generated subtitles in various languages.",
         inputSchema: {
           type: "object",
           properties: {
             url: { type: "string", description: "URL of the video" },
-            language: { type: "string", description: "Language code (e.g., 'en', 'zh-Hant', 'ja'). Will try to get auto-generated subtitles if regular subtitles are not available." },
+            language: {
+              type: "string",
+              description:
+                "Language code (e.g., 'en', 'zh-Hant', 'ja'). Will try to get auto-generated subtitles if regular subtitles are not available.",
+            },
           },
           required: ["url"],
         },
@@ -128,10 +161,11 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           type: "object",
           properties: {
             url: { type: "string", description: "URL of the video" },
-            resolution: { 
-              type: "string", 
-              description: "Preferred video resolution. For YouTube: '480p', '720p', '1080p', 'best'. For other platforms: '480p' for low quality, '720p'/'1080p' for HD, 'best' for highest quality. Defaults to '720p'",
-              enum: ["480p", "720p", "1080p", "best"]
+            resolution: {
+              type: "string",
+              description:
+                "Preferred video resolution. For YouTube: '480p', '720p', '1080p', 'best'. For other platforms: '480p' for low quality, '720p'/'1080p' for HD, 'best' for highest quality. Defaults to '720p'",
+              enum: ["480p", "720p", "1080p", "best"],
             },
           },
           required: ["url"],
@@ -139,7 +173,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "download_audio",
-        description: "Download audio in best available quality (usually m4a/mp3 format) to the user's default Downloads folder (usually ~/Downloads).",
+        description:
+          "Download audio in best available quality (usually m4a/mp3 format) to the user's default Downloads folder (usually ~/Downloads).",
         inputSchema: {
           type: "object",
           properties: {
@@ -161,19 +196,19 @@ async function handleToolExecution<T>(
   action: () => Promise<T>,
   errorPrefix: string
 ): Promise<{
-  content: Array<{ type: "text", text: string }>,
-  isError?: boolean
+  content: Array<{ type: "text"; text: string }>;
+  isError?: boolean;
 }> {
   try {
     const result = await action();
     return {
-      content: [{ type: "text", text: String(result) }]
+      content: [{ type: "text", text: String(result) }],
     };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     return {
       content: [{ type: "text", text: `${errorPrefix}: ${errorMessage}` }],
-      isError: true
+      isError: true,
     };
   }
 }
@@ -185,7 +220,7 @@ server.setRequestHandler(
   CallToolRequestSchema,
   async (request: CallToolRequest) => {
     const toolName = request.params.name;
-    const args = request.params.arguments as { 
+    const args = request.params.arguments as {
       url: string;
       language?: string;
       resolution?: string;
@@ -198,12 +233,22 @@ server.setRequestHandler(
       );
     } else if (toolName === "download_video_subtitles") {
       return handleToolExecution(
-        () => downloadSubtitles(args.url, args.language || CONFIG.download.defaultSubtitleLanguage, CONFIG),
+        () =>
+          downloadSubtitles(
+            args.url,
+            args.language || CONFIG.download.defaultSubtitleLanguage,
+            CONFIG
+          ),
         "Error downloading subtitles"
       );
     } else if (toolName === "download_video") {
       return handleToolExecution(
-        () => downloadVideo(args.url, CONFIG, args.resolution as "480p" | "720p" | "1080p" | "best"),
+        () =>
+          downloadVideo(
+            args.url,
+            CONFIG,
+            args.resolution as "480p" | "720p" | "1080p" | "best"
+          ),
         "Error downloading video"
       );
     } else if (toolName === "download_audio") {
@@ -214,20 +259,42 @@ server.setRequestHandler(
     } else {
       return {
         content: [{ type: "text", text: `Unknown tool: ${toolName}` }],
-        isError: true
+        isError: true,
       };
     }
   }
 );
 
-/**
- * Starts the server using Stdio transport.
- */
-async function startServer() {
+// 启动 MCP 服务器，支持 stdio 和 rest 两种模式
+async function runServer() {
   await initialize();
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
+
+  if (mode === "rest") {
+    console.log(
+      "使用 REST 传输，API key:",
+      apiKey ? "已设置" : "未设置（认证已禁用）"
+    );
+    const transport = new RestServerTransport({
+      port,
+      endpoint,
+      //supportTenantId: true, // 启用多租户支持
+      ...(apiKey ? { bearerToken: apiKey } : {}), // 仅在apiKey有值时启用认证
+    });
+    await server.connect(transport);
+    await transport.startServer();
+    console.error(
+      `yt-dlp-mcp MCP Server 运行在 REST 模式，端口 ${port}，endpoint ${endpoint}`
+    );
+  } else {
+    // 兼容原有 stdio 启动
+    const transport = new StdioServerTransport();
+    await server.connect(transport);
+    console.error("yt-dlp-mcp MCP Server 运行在 stdio 模式");
+  }
 }
 
-// Start the server and handle potential errors
-startServer().catch(console.error);
+// 启动服务器并处理错误
+runServer().catch((error) => {
+  console.error("启动服务器时发生致命错误:", error);
+  process.exit(1);
+});

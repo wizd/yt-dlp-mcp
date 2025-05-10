@@ -26,7 +26,8 @@
   ],
   "main": "./lib/index.mjs",
   "scripts": {
-    "prepare": "tsc && shx chmod +x ./lib/index.mjs",
+    "build": "tsc && shx chmod +x ./lib/index.mjs",
+    "start": "node lib/index.mjs",
     "test": "PYTHONPATH= PYTHONHOME= node --experimental-vm-modules node_modules/jest/bin/jest.js --detectOpenHandles --forceExit"
   },
   "author": "Dewei Yen <k@funmula.com>",
@@ -39,11 +40,15 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "0.7.0",
+    "@wizdy/typescript-sdk": "^1.0.3",
+    "dotenv": "^16.5.0",
+    "express": "^5.1.0",
     "rimraf": "^6.0.1",
     "spawn-rx": "^4.0.0"
   },
   "devDependencies": {
     "@jest/globals": "^29.7.0",
+    "@types/express": "^5.0.1",
     "@types/jest": "^29.5.14",
     "jest": "^29.7.0",
     "shx": "^0.3.4",
