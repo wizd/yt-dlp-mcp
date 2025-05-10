@@ -40,7 +40,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "0.7.0",
-    "@wizdy/typescript-sdk": "^1.0.6",
+    "@wizdy/typescript-sdk": "^1.0.7",
     "dotenv": "^16.5.0",
     "express": "^5.1.0",
     "rimraf": "^6.0.1",

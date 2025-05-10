@@ -9,8 +9,8 @@ dependencies:
     specifier: 0.7.0
     version: 0.7.0
   '@wizdy/typescript-sdk':
-    specifier: ^1.0.6
-    version: 1.0.6
+    specifier: ^1.0.7
+    version: 1.0.7
   dotenv:
     specifier: ^16.5.0
     version: 16.5.0
@@ -857,8 +857,8 @@ packages:
       '@types/yargs-parser': 21.0.3
     dev: true
 
-  /@wizdy/typescript-sdk@1.0.6:
-    resolution: {integrity: sha512-bdqiKEMZy75qLLMfI4BniI/+vp5KaORlbEv2ux+HrIlIm8/8nCOlTILdwYsFPPjYH+o4ujB6TrRKRBxSICBveA==}
+  /@wizdy/typescript-sdk@1.0.7:
+    resolution: {integrity: sha512-g9HMsxbqq/sJkNO28XX8SMFZZgbYF7MCb0eBYLACt+LErgJJ/G37IDRFUZ8mnyvynrIkcpHemvHYMgwEk0tHvw==}
     dependencies:
       '@modelcontextprotocol/sdk': 1.11.1
       content-type: 1.0.5
