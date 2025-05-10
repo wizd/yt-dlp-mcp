@@ -49,6 +49,7 @@ export async function downloadVideo(
   configParam?: Config, // config 参数变为可选
   resolution: "480p" | "720p" | "1080p" | "best" = "720p"
 ): Promise<string> {
+  console.log("downloadVideo", url, configParam, resolution);
   // 如果没有传入 configParam，则使用全局配置 GlobalAppConfig
   const effectiveConfig = configParam || GlobalAppConfig;
 
@@ -145,6 +146,7 @@ export async function downloadVideo(
 
       args.push(url);
 
+      console.log("yt-dlp args:", args);
       await _spawnPromise("yt-dlp", args);
     } catch (error) {
       throw new Error(
@@ -153,6 +155,10 @@ export async function downloadVideo(
         }`
       );
     }
+
+    console.log(
+      `all done, expectedFilename: ${effectiveConfig.file.hostingUrlBase}/${expectedFilename}`
+    );
 
     // 使用 effectiveConfig 来获取 hostingUrlBase
     return `Video successfully downloaded as "${

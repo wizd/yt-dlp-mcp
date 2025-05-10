@@ -1,3 +1,6 @@
+import dotenv from "dotenv";
+dotenv.config();
+
 import * as os from "os";
 import * as path from "path";
 
@@ -251,25 +254,36 @@ export function loadConfig(): Config {
 /**
  * 安全的文件名處理函數
  */
-export function sanitizeFilename(filename: string, config: Config['file']): string {
+export function sanitizeFilename(
+  filename: string,
+  config: Config["file"]
+): string {
   // 移除非法字符
-  let safe = filename.replace(config.sanitize.illegalChars, config.sanitize.replaceChar);
-  
+  let safe = filename.replace(
+    config.sanitize.illegalChars,
+    config.sanitize.replaceChar
+  );
+
   // 檢查保留字
   const basename = path.parse(safe).name.toUpperCase();
   if (config.sanitize.reservedNames.includes(basename)) {
     safe = `_${safe}`;
   }
-  
+
   // 處理長度限制
   if (safe.length > config.maxFilenameLength) {
     const ext = path.extname(safe);
-    const name = safe.slice(0, config.maxFilenameLength - ext.length - config.sanitize.truncateSuffix.length);
+    const name = safe.slice(
+      0,
+      config.maxFilenameLength -
+        ext.length -
+        config.sanitize.truncateSuffix.length
+    );
     safe = `${name}${config.sanitize.truncateSuffix}${ext}`;
   }
-  
+
   return safe;
 }
 
 // 導出當前配置實例
-export const CONFIG = loadConfig(); 
+export const CONFIG = loadConfig();
