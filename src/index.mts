@@ -124,11 +124,11 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       {
         name: "list_subtitle_languages",
         description:
-          "List all available subtitle languages and their formats for a video (including auto-generated captions)",
+          "使用 yt-dlp 列出视频所有可用的字幕语言及其格式（包括自动生成的字幕）。得益于 yt-dlp 的强大功能，此工具支持从超过 1800 个网站获取字幕信息。",
         inputSchema: {
           type: "object",
           properties: {
-            url: { type: "string", description: "URL of the video" },
+            url: { type: "string", description: "视频的 URL" },
           },
           required: ["url"],
         },
@@ -136,15 +136,15 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       {
         name: "download_video_subtitles",
         description:
-          "Download video subtitles in any available format. Supports both regular and auto-generated subtitles in various languages.",
+          "使用 yt-dlp 下载任何可用格式的视频字幕。支持从超过 1800 个网站下载常规字幕和自动生成的字幕。您可以指定字幕语言，如果未指定，则默认为英语。",
         inputSchema: {
           type: "object",
           properties: {
-            url: { type: "string", description: "URL of the video" },
+            url: { type: "string", description: "视频的 URL" },
             language: {
               type: "string",
               description:
-                "Language code (e.g., 'en', 'zh-Hant', 'ja'). Will try to get auto-generated subtitles if regular subtitles are not available.",
+                "字幕的语言代码 (例如：'en', 'zh-Hant', 'ja')。如果常规字幕不可用，将尝试获取自动生成的字幕。",
             },
           },
           required: ["url"],
@@ -153,15 +153,15 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       {
         name: "download_video",
         description:
-          "Download video to the user's default Downloads folder (usually ~/Downloads).",
+          "使用 yt-dlp 将视频下载到用户的默认下载文件夹 (通常是 ~/Downloads)。由于本项目基于 yt-dlp，它具备从超过 1800 个网站下载视频的能力，包括但不限于 YouTube、Vimeo、Bilibili、Facebook、Twitter 等主流平台以及众多其他各类视频网站。",
         inputSchema: {
           type: "object",
           properties: {
-            url: { type: "string", description: "URL of the video" },
+            url: { type: "string", description: "视频的 URL" },
             resolution: {
               type: "string",
               description:
-                "Preferred video resolution. For YouTube: '480p', '720p', '1080p', 'best'. For other platforms: '480p' for low quality, '720p'/'1080p' for HD, 'best' for highest quality. Defaults to '720p'",
+                "首选视频分辨率。对于 YouTube 等支持多种分辨率的平台：可指定 '480p'、'720p'、'1080p' 或 'best'（最高可用质量）。对于其他平台：通常 '480p' 对应标清，'720p'/'1080p' 对应高清，'best' 对应最佳质量。默认为 '720p'。",
               enum: ["480p", "720p", "1080p", "best"],
             },
           },
@@ -171,11 +171,11 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       {
         name: "download_audio",
         description:
-          "Download audio in best available quality (usually m4a/mp3 format) to the user's default Downloads folder (usually ~/Downloads).",
+          "使用 yt-dlp 将指定 URL 视频的音轨以最佳可用质量（通常为 m4a 或 mp3 格式）下载到用户的默认下载文件夹 (通常是 ~/Downloads)。得益于 yt-dlp，此功能能够从超过 1800 个网站提取和下载音频内容。",
         inputSchema: {
           type: "object",
           properties: {
-            url: { type: "string", description: "URL of the video" },
+            url: { type: "string", description: "包含音频的视频 URL" },
           },
           required: ["url"],
         },
