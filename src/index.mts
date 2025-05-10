@@ -16,6 +16,7 @@ import { _spawnPromise, safeCleanup } from "./modules/utils.js";
 import { downloadVideo } from "./modules/video.js";
 import { downloadAudio } from "./modules/audio.js";
 import { listSubtitles, downloadSubtitles } from "./modules/subtitle.js";
+import { executeFFmpegCommand } from "./modules/ffmpeg_tool.js";
 import { RestServerTransport } from "@wizdy/typescript-sdk/server/rest.js";
 import { getParamValue } from "@wizdy/typescript-sdk/utils/index.js";
 import { Request, Response } from "express";
@@ -180,6 +181,22 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           required: ["url"],
         },
       },
+      {
+        name: "execute_ffmpeg_command",
+        description:
+          "执行用户提供的 FFmpeg 命令参数字符串。命令将在默认的视频下载目录中执行。用户需要提供 FFmpeg 命令本身之后的所有参数作为单个字符串。例如：'-i input.mp4 -vf scale=1280:720 output.mp4'。请确保输入/输出文件名正确，如果不是绝对路径，则它们是相对于下载目录的。由于 FFmpeg 功能强大且复杂，请谨慎构造命令参数。",
+        inputSchema: {
+          type: "object",
+          properties: {
+            ffmpeg_args: {
+              type: "string",
+              description:
+                "要传递给 FFmpeg 的完整参数字符串 (例如：'-i input.mp4 -ss 00:00:10 -t 00:00:05 -c copy output_segment.mp4')",
+            },
+          },
+          required: ["ffmpeg_args"],
+        },
+      },
     ],
   };
 });
@@ -221,6 +238,7 @@ server.setRequestHandler(
       url: string;
       language?: string;
       resolution?: string;
+      ffmpeg_args?: string;
     };
 
     if (toolName === "list_subtitle_languages") {
@@ -252,6 +270,19 @@ server.setRequestHandler(
       return handleToolExecution(
         () => downloadAudio(args.url, CONFIG),
         "Error downloading audio"
+      );
+    } else if (toolName === "execute_ffmpeg_command") {
+      if (typeof args.ffmpeg_args !== "string") {
+        return {
+          content: [
+            { type: "text", text: "Error: ffmpeg_args must be a string." },
+          ],
+          isError: true,
+        };
+      }
+      return handleToolExecution(
+        () => executeFFmpegCommand(args.ffmpeg_args as string),
+        "Error executing FFmpeg command"
       );
     } else {
       return {

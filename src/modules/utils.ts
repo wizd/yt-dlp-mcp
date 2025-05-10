@@ -1,13 +1,13 @@
 import * as fs from 'fs';
-import { spawn } from 'child_process';
-import { randomBytes } from 'crypto';
+import { spawn, SpawnOptionsWithoutStdio } from "child_process";
+import { randomBytes } from "crypto";
 
 /**
  * Validates if a given string is a valid URL.
- * 
+ *
  * @param url - The URL string to validate
  * @returns True if the URL is valid, false otherwise
- * 
+ *
  * @example
  * ```typescript
  * if (validateUrl('https://youtube.com/watch?v=...')) {
@@ -26,10 +26,10 @@ export function validateUrl(url: string): boolean {
 
 /**
  * Checks if a URL is from YouTube.
- * 
+ *
  * @param url - The URL to check
  * @returns True if the URL is from YouTube, false otherwise
- * 
+ *
  * @example
  * ```typescript
  * if (isYouTubeUrl('https://youtube.com/watch?v=...')) {
@@ -40,7 +40,10 @@ export function validateUrl(url: string): boolean {
 export function isYouTubeUrl(url: string): boolean {
   try {
     const parsedUrl = new URL(url);
-    return parsedUrl.hostname.includes('youtube.com') || parsedUrl.hostname.includes('youtu.be');
+    return (
+      parsedUrl.hostname.includes("youtube.com") ||
+      parsedUrl.hostname.includes("youtu.be")
+    );
   } catch {
     return false;
   }
@@ -48,11 +51,11 @@ export function isYouTubeUrl(url: string): boolean {
 
 /**
  * Safely cleans up a directory and its contents.
- * 
+ *
  * @param directory - Path to the directory to clean up
  * @returns Promise that resolves when cleanup is complete
  * @throws {Error} When directory cannot be removed
- * 
+ *
  * @example
  * ```typescript
  * try {
@@ -72,12 +75,13 @@ export async function safeCleanup(directory: string): Promise<void> {
 
 /**
  * Spawns a child process and returns its output as a promise.
- * 
+ *
  * @param command - The command to execute
  * @param args - Array of command arguments
+ * @param options - Optional SpawnOptionsWithoutStdio options
  * @returns Promise resolving to the command output
  * @throws {Error} When command execution fails
- * 
+ *
  * @example
  * ```typescript
  * try {
@@ -88,20 +92,24 @@ export async function safeCleanup(directory: string): Promise<void> {
  * }
  * ```
  */
-export function _spawnPromise(command: string, args: string[]): Promise<string> {
+export function _spawnPromise(
+  command: string,
+  args: string[],
+  options?: SpawnOptionsWithoutStdio
+): Promise<string> {
   return new Promise((resolve, reject) => {
-    const process = spawn(command, args);
-    let output = '';
+    const process = spawn(command, args, options);
+    let output = "";
 
-    process.stdout.on('data', (data) => {
+    process.stdout.on("data", (data) => {
       output += data.toString();
     });
 
-    process.stderr.on('data', (data) => {
+    process.stderr.on("data", (data) => {
       output += data.toString();
     });
 
-    process.on('close', (code) => {
+    process.on("close", (code) => {
       if (code === 0) {
         resolve(output);
       } else {

@@ -217,7 +217,10 @@ export async function downloadVideo(
     );
 
     // 使用 effectiveConfig 来获取 hostingUrlBase
-    return `Video successfully downloaded as ${
+    return `Video successfully downloaded to working dir as: ${path.basename(
+      expectedFilename
+    )}
+    You can access it via url: ${
       effectiveConfig.file.hostingUrlBase
     }/${path.basename(expectedFilename)}`;
   } catch (error) {
