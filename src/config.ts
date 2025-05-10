@@ -14,6 +14,7 @@ export interface Config {
     maxFilenameLength: number;
     downloadsDir: string;
     tempDirPrefix: string;
+    hostingUrlBase: string;
     // 文件名處理相關配置
     sanitize: {
       // 替換非法字符為此字符
@@ -46,25 +47,45 @@ const defaultConfig: Config = {
     maxFilenameLength: 50,
     downloadsDir: path.join(os.homedir(), "Downloads"),
     tempDirPrefix: "ytdlp-",
+    hostingUrlBase: "/download",
     sanitize: {
-      replaceChar: '_',
-      truncateSuffix: '...',
-      illegalChars: /[<>:"/\\|?*\x00-\x1F]/g,  // Windows 非法字符
+      replaceChar: "_",
+      truncateSuffix: "...",
+      illegalChars: /[<>:"/\\|?*\x00-\x1F]/g, // Windows 非法字符
       reservedNames: [
-        'CON', 'PRN', 'AUX', 'NUL', 'COM1', 'COM2', 'COM3', 'COM4',
-        'COM5', 'COM6', 'COM7', 'COM8', 'COM9', 'LPT1', 'LPT2',
-        'LPT3', 'LPT4', 'LPT5', 'LPT6', 'LPT7', 'LPT8', 'LPT9'
-      ]
-    }
+        "CON",
+        "PRN",
+        "AUX",
+        "NUL",
+        "COM1",
+        "COM2",
+        "COM3",
+        "COM4",
+        "COM5",
+        "COM6",
+        "COM7",
+        "COM8",
+        "COM9",
+        "LPT1",
+        "LPT2",
+        "LPT3",
+        "LPT4",
+        "LPT5",
+        "LPT6",
+        "LPT7",
+        "LPT8",
+        "LPT9",
+      ],
+    },
   },
   tools: {
-    required: ['yt-dlp']
+    required: ["yt-dlp"],
   },
   download: {
     defaultResolution: "720p",
     defaultAudioFormat: "m4a",
-    defaultSubtitleLanguage: "en"
-  }
+    defaultSubtitleLanguage: "en",
+  },
 };
 
 /**
@@ -74,17 +95,21 @@ function loadEnvConfig(): DeepPartial<Config> {
   const envConfig: DeepPartial<Config> = {};
 
   // 文件配置
-  const fileConfig: DeepPartial<Config['file']> = {
+  const fileConfig: DeepPartial<Config["file"]> = {
     sanitize: {
       replaceChar: process.env.YTDLP_SANITIZE_REPLACE_CHAR,
       truncateSuffix: process.env.YTDLP_SANITIZE_TRUNCATE_SUFFIX,
-      illegalChars: process.env.YTDLP_SANITIZE_ILLEGAL_CHARS ? new RegExp(process.env.YTDLP_SANITIZE_ILLEGAL_CHARS) : undefined,
-      reservedNames: process.env.YTDLP_SANITIZE_RESERVED_NAMES?.split(',')
-    }
+      illegalChars: process.env.YTDLP_SANITIZE_ILLEGAL_CHARS
+        ? new RegExp(process.env.YTDLP_SANITIZE_ILLEGAL_CHARS)
+        : undefined,
+      reservedNames: process.env.YTDLP_SANITIZE_RESERVED_NAMES?.split(","),
+    },
   };
-  
+
   if (process.env.YTDLP_MAX_FILENAME_LENGTH) {
-    fileConfig.maxFilenameLength = parseInt(process.env.YTDLP_MAX_FILENAME_LENGTH);
+    fileConfig.maxFilenameLength = parseInt(
+      process.env.YTDLP_MAX_FILENAME_LENGTH
+    );
   }
   if (process.env.YTDLP_DOWNLOADS_DIR) {
     fileConfig.downloadsDir = process.env.YTDLP_DOWNLOADS_DIR;
@@ -92,23 +117,35 @@ function loadEnvConfig(): DeepPartial<Config> {
   if (process.env.YTDLP_TEMP_DIR_PREFIX) {
     fileConfig.tempDirPrefix = process.env.YTDLP_TEMP_DIR_PREFIX;
   }
+  if (process.env.HOSTING_URL_BASE) {
+    fileConfig.hostingUrlBase = process.env.HOSTING_URL_BASE;
+  }
 
   if (Object.keys(fileConfig).length > 0) {
     envConfig.file = fileConfig;
   }
 
   // 下載配置
-  const downloadConfig: Partial<Config['download']> = {};
-  if (process.env.YTDLP_DEFAULT_RESOLUTION && 
-      ['480p', '720p', '1080p', 'best'].includes(process.env.YTDLP_DEFAULT_RESOLUTION)) {
-    downloadConfig.defaultResolution = process.env.YTDLP_DEFAULT_RESOLUTION as Config['download']['defaultResolution'];
+  const downloadConfig: Partial<Config["download"]> = {};
+  if (
+    process.env.YTDLP_DEFAULT_RESOLUTION &&
+    ["480p", "720p", "1080p", "best"].includes(
+      process.env.YTDLP_DEFAULT_RESOLUTION
+    )
+  ) {
+    downloadConfig.defaultResolution = process.env
+      .YTDLP_DEFAULT_RESOLUTION as Config["download"]["defaultResolution"];
   }
-  if (process.env.YTDLP_DEFAULT_AUDIO_FORMAT && 
-      ['m4a', 'mp3'].includes(process.env.YTDLP_DEFAULT_AUDIO_FORMAT)) {
-    downloadConfig.defaultAudioFormat = process.env.YTDLP_DEFAULT_AUDIO_FORMAT as Config['download']['defaultAudioFormat'];
+  if (
+    process.env.YTDLP_DEFAULT_AUDIO_FORMAT &&
+    ["m4a", "mp3"].includes(process.env.YTDLP_DEFAULT_AUDIO_FORMAT)
+  ) {
+    downloadConfig.defaultAudioFormat = process.env
+      .YTDLP_DEFAULT_AUDIO_FORMAT as Config["download"]["defaultAudioFormat"];
   }
   if (process.env.YTDLP_DEFAULT_SUBTITLE_LANG) {
-    downloadConfig.defaultSubtitleLanguage = process.env.YTDLP_DEFAULT_SUBTITLE_LANG;
+    downloadConfig.defaultSubtitleLanguage =
+      process.env.YTDLP_DEFAULT_SUBTITLE_LANG;
   }
   if (Object.keys(downloadConfig).length > 0) {
     envConfig.download = downloadConfig;
@@ -123,32 +160,40 @@ function loadEnvConfig(): DeepPartial<Config> {
 function validateConfig(config: Config): void {
   // 驗證文件名長度
   if (config.file.maxFilenameLength < 5) {
-    throw new Error('maxFilenameLength must be at least 5');
+    throw new Error("maxFilenameLength must be at least 5");
   }
 
   // 驗證下載目錄
   if (!config.file.downloadsDir) {
-    throw new Error('downloadsDir must be specified');
+    throw new Error("downloadsDir must be specified");
   }
 
   // 驗證臨時目錄前綴
   if (!config.file.tempDirPrefix) {
-    throw new Error('tempDirPrefix must be specified');
+    throw new Error("tempDirPrefix must be specified");
   }
 
   // 驗證默認分辨率
-  if (!['480p', '720p', '1080p', 'best'].includes(config.download.defaultResolution)) {
-    throw new Error('Invalid defaultResolution');
+  if (
+    !["480p", "720p", "1080p", "best"].includes(
+      config.download.defaultResolution
+    )
+  ) {
+    throw new Error("Invalid defaultResolution");
   }
 
   // 驗證默認音頻格式
-  if (!['m4a', 'mp3'].includes(config.download.defaultAudioFormat)) {
-    throw new Error('Invalid defaultAudioFormat');
+  if (!["m4a", "mp3"].includes(config.download.defaultAudioFormat)) {
+    throw new Error("Invalid defaultAudioFormat");
   }
 
   // 驗證默認字幕語言
-  if (!/^[a-z]{2,3}(-[A-Z][a-z]{3})?(-[A-Z]{2})?$/i.test(config.download.defaultSubtitleLanguage)) {
-    throw new Error('Invalid defaultSubtitleLanguage');
+  if (
+    !/^[a-z]{2,3}(-[A-Z][a-z]{3})?(-[A-Z]{2})?$/i.test(
+      config.download.defaultSubtitleLanguage
+    )
+  ) {
+    throw new Error("Invalid defaultSubtitleLanguage");
   }
 }
 
@@ -158,24 +203,38 @@ function validateConfig(config: Config): void {
 function mergeConfig(base: Config, override: DeepPartial<Config>): Config {
   return {
     file: {
-      maxFilenameLength: override.file?.maxFilenameLength || base.file.maxFilenameLength,
+      maxFilenameLength:
+        override.file?.maxFilenameLength || base.file.maxFilenameLength,
       downloadsDir: override.file?.downloadsDir || base.file.downloadsDir,
       tempDirPrefix: override.file?.tempDirPrefix || base.file.tempDirPrefix,
+      hostingUrlBase: override.file?.hostingUrlBase || base.file.hostingUrlBase,
       sanitize: {
-        replaceChar: override.file?.sanitize?.replaceChar || base.file.sanitize.replaceChar,
-        truncateSuffix: override.file?.sanitize?.truncateSuffix || base.file.sanitize.truncateSuffix,
-        illegalChars: (override.file?.sanitize?.illegalChars || base.file.sanitize.illegalChars) as RegExp,
-        reservedNames: (override.file?.sanitize?.reservedNames || base.file.sanitize.reservedNames) as readonly string[]
-      }
+        replaceChar:
+          override.file?.sanitize?.replaceChar ||
+          base.file.sanitize.replaceChar,
+        truncateSuffix:
+          override.file?.sanitize?.truncateSuffix ||
+          base.file.sanitize.truncateSuffix,
+        illegalChars: (override.file?.sanitize?.illegalChars ||
+          base.file.sanitize.illegalChars) as RegExp,
+        reservedNames: (override.file?.sanitize?.reservedNames ||
+          base.file.sanitize.reservedNames) as readonly string[],
+      },
     },
     tools: {
-      required: (override.tools?.required || base.tools.required) as readonly string[]
+      required: (override.tools?.required ||
+        base.tools.required) as readonly string[],
     },
     download: {
-      defaultResolution: override.download?.defaultResolution || base.download.defaultResolution,
-      defaultAudioFormat: override.download?.defaultAudioFormat || base.download.defaultAudioFormat,
-      defaultSubtitleLanguage: override.download?.defaultSubtitleLanguage || base.download.defaultSubtitleLanguage
-    }
+      defaultResolution:
+        override.download?.defaultResolution || base.download.defaultResolution,
+      defaultAudioFormat:
+        override.download?.defaultAudioFormat ||
+        base.download.defaultAudioFormat,
+      defaultSubtitleLanguage:
+        override.download?.defaultSubtitleLanguage ||
+        base.download.defaultSubtitleLanguage,
+    },
   };
 }
 

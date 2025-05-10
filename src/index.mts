@@ -19,6 +19,7 @@ import { listSubtitles, downloadSubtitles } from "./modules/subtitle.js";
 import { RestServerTransport } from "@wizdy/typescript-sdk/server/rest.js";
 import { getParamValue } from "@wizdy/typescript-sdk/utils/index.js";
 import dotenv from "dotenv";
+import { Request, Response } from "express";
 
 // 加载环境变量
 dotenv.config();
@@ -282,6 +283,45 @@ async function runServer() {
     });
     await server.connect(transport);
     await transport.startServer();
+
+    // 注册一个文件下载路由
+    transport.registerRoute(
+      "get",
+      "/download/:filename",
+      (req: Request, res: Response) => {
+        // Request 和 Response 类型现在与 express.RequestHandler 兼容
+        const filename = req.params.filename;
+        if (!filename) {
+          res.status(400).send("Filename is required");
+          return;
+        }
+        // Ensure filename is just a filename and not a path
+        const sanitizedFilename = path.basename(filename);
+        if (sanitizedFilename !== filename) {
+          // Prevent directory traversal
+          res.status(400).send("Invalid filename");
+          return;
+        }
+        const downloadsDir = path.join(os.homedir(), "Downloads");
+        const filePath = path.join(downloadsDir, sanitizedFilename);
+
+        // Check if file exists and then send
+        if (fs.existsSync(filePath)) {
+          res.download(filePath, sanitizedFilename, (err) => {
+            if (err) {
+              // Handle error, but headers may have already been sent
+              console.error("Error downloading file:", err);
+              if (!res.headersSent) {
+                res.status(500).send("Error downloading file");
+              }
+            }
+          });
+        } else {
+          res.status(404).send("File not found");
+        }
+      }
+    );
+
     console.error(
       `yt-dlp-mcp MCP Server 运行在 REST 模式，端口 ${port}，endpoint ${endpoint}`
     );
