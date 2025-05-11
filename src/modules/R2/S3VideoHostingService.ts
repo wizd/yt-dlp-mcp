@@ -222,20 +222,20 @@ import {
   }
   
   // --- 使用示例 (概念性) ---
-  async function exampleUsage() {
-    // 1. 配置 (从环境变量、配置文件等加载)
-    const hostingConfig: VideoHostingConfig = {
-      region: 'auto', // Cloudflare R2 特定
-      endpoint: 'https_YOUR_ACCOUNT_ID.r2.cloudflarestorage.com',
-      credentials: {
-        accessKeyId: 'YOUR_R2_ACCESS_KEY_ID',
-        secretAccessKey: 'YOUR_R2_SECRET_ACCESS_KEY',
-      },
-      bucket: 'your-video-bucket-name',
-      publicBaseUrl: 'https_pub-YOUR_R2_PUBLIC_BUCKET_ID.r2.dev', // 如果你的 R2 存储桶已启用公共访问
-    };
+  // async function exampleUsage() {
+  //   // 1. 配置 (从环境变量、配置文件等加载)
+  //   const hostingConfig: VideoHostingConfig = {
+  //     region: 'auto', // Cloudflare R2 特定
+  //     endpoint: 'https_YOUR_ACCOUNT_ID.r2.cloudflarestorage.com',
+  //     credentials: {
+  //       accessKeyId: 'YOUR_R2_ACCESS_KEY_ID',
+  //       secretAccessKey: 'YOUR_R2_SECRET_ACCESS_KEY',
+  //     },
+  //     bucket: 'your-video-bucket-name',
+  //     publicBaseUrl: 'https_pub-YOUR_R2_PUBLIC_BUCKET_ID.r2.dev', // 如果你的 R2 存储桶已启用公共访问
+  //   };
   
-    const videoService = new S3VideoHostingService(hostingConfig);
+  //   const videoService = new S3VideoHostingService(hostingConfig);
   
     // --- 场景 A: 上传单个 MP4 文件 ---
     // 在 Node.js 中:
@@ -286,12 +286,12 @@ import {
   
     // 你需要准备一个文件列表来上传
     // 在 Node.js 中，你可以使用 fs.readdirSync 递归读取目录并创建流
-    const hlsFilesToUpload = [
+   // const hlsFilesToUpload = [
       // { fileStream: fs.createReadStream('./local-hls-path/master.m3u8'), key: 'hls/my-stream/master.m3u8', contentType: 'application/x-mpegURL' },
       // { fileStream: fs.createReadStream('./local-hls-path/variant_1.m3u8'), key: 'hls/my-stream/variant_1.m3u8', contentType: 'application/x-mpegURL' },
       // { fileStream: fs.createReadStream('./local-hls-path/segment_1_0.ts'), key: 'hls/my-stream/segment_1_0.ts', contentType: 'video/MP2T' },
       // ... more segments and variant playlists
-    ];
+    //];
   
     /*
     if (hlsFilesToUpload.length > 0) {
@@ -308,15 +308,15 @@ import {
   
   
     // --- 场景 C: 列出视频 ---
-    try {
-      const allVideos = await videoService.listFiles('videos/');
-      console.log('All videos in "videos/" path:', allVideos);
+    // try {
+    //   const allVideos = await videoService.listFiles('videos/');
+    //   console.log('All videos in "videos/" path:', allVideos);
   
-      const specificHLSStreamFiles = await videoService.listFiles('hls/my-stream/');
-      console.log('Files for HLS stream "my-stream":', specificHLSStreamFiles);
-    } catch (err) {
-      console.error('Failed to list files:', err);
-    }
+    //   const specificHLSStreamFiles = await videoService.listFiles('hls/my-stream/');
+    //   console.log('Files for HLS stream "my-stream":', specificHLSStreamFiles);
+    // } catch (err) {
+    //   console.error('Failed to list files:', err);
+    // }
   
     // --- 场景 D: 删除视频 (例如，删除之前上传的单个 MP4) ---
     /*
@@ -327,7 +327,7 @@ import {
       console.error('Failed to delete file:', err);
     }
     */
-  }
+  //}
   
   // 调用示例 (确保在 async 上下文中运行或使用 .then().catch())
   // exampleUsage().catch(console.error);

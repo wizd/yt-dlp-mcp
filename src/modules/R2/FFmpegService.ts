@@ -1,9 +1,8 @@
 // FFmpegService.ts
 import { spawn } from 'child_process';
 import * as fs from 'fs/promises';
-import * as path from 'path';
-import { randomUUID } from 'crypto'; // 用于生成唯一目录名
-import * as os from 'os';
+import * as path from "path";
+import * as os from "os";
 
 // --- FFmpeg 模块配置接口 ---
 export interface RenditionConfig {
@@ -25,31 +24,62 @@ export interface FFmpegHLSProcessingOptions {
   outputDirName?: string; // 在基础临时目录中为特定作业指定的输出子目录名。默认为videoId或UUID。
   baseTempDir?: string; // 存放HLS文件的基础临时目录。默认为 'os.tmpdir()/ffmpeg_hls_temp'。
   s3KeyPrefix?: string; // S3存储键的前缀，例如 "hls" 或 "videos/processed"
+  hasInputAudio?: boolean; // 新增：指示输入视频是否包含音频流
 }
 
 export interface HLSFile {
   localPath: string; // 本地文件的完整路径
-  s3Key: string;     // 目标S3存储键
+  s3Key: string; // 目标S3存储键
   contentType: string; // 文件MIME类型
 }
 
 export interface HLSProcessingResult {
-  localOutputDir: string;         // HLS文件在本地生成的目录
-  masterPlaylistS3Key: string;  // 主播放列表的完整S3存储键
-  filesToUpload: HLSFile[];     // 需要上传的文件列表
+  localOutputDir: string; // HLS文件在本地生成的目录
+  masterPlaylistS3Key: string; // 主播放列表的完整S3存储键
+  filesToUpload: HLSFile[]; // 需要上传的文件列表
 }
 
 // 默认码率配置
 const DEFAULT_RENDITIONS: RenditionConfig[] = [
-  { label: '1080p', width: 1920, height: 1080, videoBitrate: '5000k', audioBitrate: '192k', crf: 20, preset: 'medium', profile: 'high', level: '4.2' },
-  { label: '720p', width: 1280, height: 720, videoBitrate: '2800k', audioBitrate: '128k', crf: 22, preset: 'medium', profile: 'main', level: '3.1' },
-  { label: '480p', width: 854, height: 480, videoBitrate: '1400k', audioBitrate: '96k', crf: 23, preset: 'medium', profile: 'main', level: '3.1' },
+  {
+    label: "1080p",
+    width: 1920,
+    height: 1080,
+    videoBitrate: "5000k",
+    audioBitrate: "192k",
+    crf: 20,
+    preset: "medium",
+    profile: "high",
+    level: "4.2",
+  },
+  {
+    label: "720p",
+    width: 1280,
+    height: 720,
+    videoBitrate: "2800k",
+    audioBitrate: "128k",
+    crf: 22,
+    preset: "medium",
+    profile: "main",
+    level: "3.1",
+  },
+  {
+    label: "480p",
+    width: 854,
+    height: 480,
+    videoBitrate: "1400k",
+    audioBitrate: "96k",
+    crf: 23,
+    preset: "medium",
+    profile: "main",
+    level: "3.1",
+  },
 ];
 
 export class FFmpegService {
   private ffmpegPath: string;
 
-  constructor(ffmpegPath: string = 'ffmpeg') {
+  constructor(ffmpegPath: string = "ffmpeg") {
     this.ffmpegPath = ffmpegPath;
     // 可以在这里添加检查FFmpeg是否可访问的逻辑
   }
@@ -68,90 +98,124 @@ export class FFmpegService {
   ): Promise<HLSProcessingResult> {
     const renditions = options.renditions || DEFAULT_RENDITIONS;
     const hlsTime = options.hlsTime || 4; // HLS片段时长，例如4秒
-    const s3KeyPrefix = options.s3KeyPrefix || 'hls'; // S3存储路径前缀
-    const baseTempDir = options.baseTempDir || path.join(os.tmpdir(), 'ffmpeg_hls_processing');
+    const s3KeyPrefix = options.s3KeyPrefix || "hls"; // S3存储路径前缀
+    const baseTempDir =
+      options.baseTempDir || path.join(os.tmpdir(), "ffmpeg_hls_processing");
     const jobSpecificDirName = options.outputDirName || videoId; // 使用videoId作为子目录名
     const outputDir = path.join(baseTempDir, jobSpecificDirName);
+
+    // 如果未指定 hasInputAudio，默认为 true (维持先前行为，假设有音频)
+    // 调用者应通过 ffprobe 等工具检测后传入准确值
+    const hasInputAudio =
+      options.hasInputAudio === undefined ? true : options.hasInputAudio;
 
     try {
       await fs.mkdir(outputDir, { recursive: true });
       console.log(`Created temporary HLS output directory: ${outputDir}`);
 
-      const masterPlaylistName = 'master.m3u8';
-      const args: string[] = ['-hide_banner', '-y', '-i', localVideoPath];
+      const masterPlaylistName = "master.m3u8";
+      const args: string[] = ["-hide_banner", "-y", "-i", localVideoPath];
 
       // 构建 filter_complex 参数用于视频缩放
-      let filterComplex = '';
+      let filterComplex = "";
       renditions.forEach((rendition, index) => {
         // [0:v] 表示第一个输入文件的视频流
         filterComplex += `[0:v]scale=w=${rendition.width}:h=${rendition.height}:force_original_aspect_ratio=decrease:force_divisible_by=2,format=yuv420p[v${index}];`;
       });
-      args.push('-filter_complex', filterComplex.trim().slice(0, -1)); // 移除末尾的分号
+      args.push("-filter_complex", filterComplex.trim().slice(0, -1)); // 移除末尾的分号
 
       // 为每个码率版本构建输出流映射和编解码选项
-      let varStreamMap = '';
+      let varStreamMap = "";
       renditions.forEach((rendition, index) => {
         args.push(`-map`, `[v${index}]`); // 映射处理后的视频流
-        args.push(`-c:v:${index}`, 'libx264');
-        if (rendition.profile) args.push(`-profile:v:${index}`, rendition.profile);
+        args.push(`-c:v:${index}`, "libx264");
+        if (rendition.profile)
+          args.push(`-profile:v:${index}`, rendition.profile);
         if (rendition.level) args.push(`-level:v:${index}`, rendition.level);
-        args.push(`-preset:v:${index}`, rendition.preset || 'medium');
+        args.push(`-preset:v:${index}`, rendition.preset || "medium");
         if (rendition.crf) args.push(`-crf:${index}`, rendition.crf.toString());
         args.push(`-b:v:${index}`, rendition.videoBitrate);
         args.push(`-maxrate:${index}`, rendition.videoBitrate); // 可以根据需要调整
-        args.push(`-bufsize:${index}`, `calc(${rendition.videoBitrate} * 2)`); // 估算bufsize
+
+        // 修正 bufsize 参数，移除 calc() 并预计算值
+        const bitrateStr = rendition.videoBitrate; // 例如 "5000k"
+        const numericPartOfBitrate = parseInt(bitrateStr); // 例如 5000
+        // 提取单位，例如 "k" 或 "M"
+        const unitSuffix = bitrateStr.substring(
+          numericPartOfBitrate.toString().length
+        );
+        const calculatedBufsize =
+          (numericPartOfBitrate * 2).toString() + unitSuffix; // 例如 "10000k"
+        args.push(`-bufsize:${index}`, calculatedBufsize); // 估算bufsize
+
         args.push(`-g:${index}`, (hlsTime * 25 * 2).toString()); // GOP 大小，假设帧率为25fps，2秒一个I帧
         args.push(`-keyint_min:${index}`, (hlsTime * 25 * 2).toString());
-        args.push(`-sc_threshold:${index}`, '0');
+        args.push(`-sc_threshold:${index}`, "0");
 
+        let currentVariantMapSegment = `v:${index}`;
 
-        args.push(`-map`, `0:a:0?`); // 映射第一个音频流，如果存在 ('?' 使其可选)
-        args.push(`-c:a:${index}`, 'aac');
-        args.push(`-b:a:${index}`, rendition.audioBitrate);
-        args.push(`-ar:${index}`, '48000'); // 音频采样率
-        args.push(`-ac:${index}`, '2');    // 立体声
+        if (hasInputAudio) {
+          args.push(`-map`, `0:a:0?`); // 映射第一个音频流，如果存在 ('?' 使其可选)
+          args.push(`-c:a:${index}`, "aac");
+          args.push(`-b:a:${index}`, rendition.audioBitrate);
+          args.push(`-ar:${index}`, "48000"); // 音频采样率
+          args.push(`-ac:${index}`, "2"); // 立体声
+          currentVariantMapSegment += `,a:${index}`;
+        }
 
-        // 构建 var_stream_map 参数
-        varStreamMap += `v:${index},a:${index},name:${rendition.label} `;
+        currentVariantMapSegment += `,name:${rendition.label} `;
+        varStreamMap += currentVariantMapSegment;
       });
 
-      args.push('-f', 'hls');
-      args.push('-hls_time', hlsTime.toString());
-      args.push('-hls_playlist_type', 'vod'); // 'vod' 表示视频点播
-      args.push('-hls_flags', 'independent_segments');
+      args.push("-f", "hls");
+      args.push("-hls_time", hlsTime.toString());
+      args.push("-hls_playlist_type", "vod"); // 'vod' 表示视频点播
+      args.push("-hls_flags", "independent_segments");
       // %v 会被 -var_stream_map 中的 'name' (即rendition.label) 替换
-      args.push('-hls_segment_filename', path.join(outputDir, `${videoId}_%v_segment_%03d.ts`));
-      args.push('-master_pl_name', masterPlaylistName); // 主播放列表文件名
-      args.push('-var_stream_map', varStreamMap.trim());
+      args.push(
+        "-hls_segment_filename",
+        path.join(outputDir, `${videoId}_%v_segment_%03d.ts`)
+      );
+      args.push("-master_pl_name", masterPlaylistName); // 主播放列表文件名
+      args.push("-var_stream_map", varStreamMap.trim());
       // %v 同样会被 'name' 替换，生成如 1080p.m3u8, 720p.m3u8 的变体播放列表
       args.push(path.join(outputDir, `${videoId}_%v.m3u8`));
 
       console.log(`Executing FFmpeg command:`);
-      console.log(`${this.ffmpegPath} ${args.map(arg => arg.includes(" ") ? `"${arg}"` : arg).join(' ')}`);
-
+      console.log(
+        `${this.ffmpegPath} ${args
+          .map((arg) => (arg.includes(" ") ? `"${arg}"` : arg))
+          .join(" ")}`
+      );
 
       await new Promise<void>((resolve, reject) => {
-        const ffmpegProcess = spawn(this.ffmpegPath, args, { stdio: 'pipe' });
+        const ffmpegProcess = spawn(this.ffmpegPath, args, { stdio: "pipe" });
 
-        let stderrOutput = '';
-        ffmpegProcess.stdout?.on('data', (data) => console.log(`FFMPEG_STDOUT: ${data.toString().trim()}`));
-        ffmpegProcess.stderr?.on('data', (data) => {
+        let stderrOutput = "";
+        ffmpegProcess.stdout?.on("data", (data) =>
+          console.log(`FFMPEG_STDOUT: ${data.toString().trim()}`)
+        );
+        ffmpegProcess.stderr?.on("data", (data) => {
           const line = data.toString().trim();
           console.error(`FFMPEG_STDERR: ${line}`);
-          stderrOutput += line + '\n';
+          stderrOutput += line + "\n";
         });
 
-        ffmpegProcess.on('close', (code) => {
+        ffmpegProcess.on("close", (code) => {
           if (code === 0) {
-            console.log('FFmpeg processing completed successfully.');
+            console.log("FFmpeg processing completed successfully.");
             resolve();
           } else {
             console.error(`FFmpeg process exited with code ${code}`);
-            reject(new Error(`FFmpeg process exited with code ${code}. FFmpeg output:\n${stderrOutput}`));
+            reject(
+              new Error(
+                `FFmpeg process exited with code ${code}. FFmpeg output:\n${stderrOutput}`
+              )
+            );
           }
         });
-        ffmpegProcess.on('error', (err) => {
-          console.error('Failed to start FFmpeg process:', err);
+        ffmpegProcess.on("error", (err) => {
+          console.error("Failed to start FFmpeg process:", err);
           reject(err);
         });
       });
@@ -164,11 +228,11 @@ export class FFmpegService {
       for (const file of filesInOutputDir) {
         const localPath = path.join(outputDir, file);
         const s3Key = `${s3ObjectPrefix}/${file}`; // S3中的相对路径
-        let contentType = 'application/octet-stream'; //默认
-        if (file.endsWith('.m3u8')) {
-          contentType = 'application/vnd.apple.mpegurl'; // 或者 'application/x-mpegURL'
-        } else if (file.endsWith('.ts')) {
-          contentType = 'video/MP2T';
+        let contentType = "application/octet-stream"; //默认
+        if (file.endsWith(".m3u8")) {
+          contentType = "application/vnd.apple.mpegurl"; // 或者 'application/x-mpegURL'
+        } else if (file.endsWith(".ts")) {
+          contentType = "video/MP2T";
         }
         filesToUpload.push({ localPath, s3Key, contentType });
       }
@@ -181,14 +245,17 @@ export class FFmpegService {
         filesToUpload,
       };
     } catch (error) {
-      console.error('Error during HLS processing:', error);
+      console.error("Error during HLS processing:", error);
       // 发生错误时，尝试清理临时目录（如果已创建）
       if (outputDir) {
         try {
           await fs.rm(outputDir, { recursive: true, force: true });
           console.log(`Cleaned up temporary directory on error: ${outputDir}`);
         } catch (cleanupError) {
-          console.error(`Failed to cleanup temporary directory on error: ${outputDir}`, cleanupError);
+          console.error(
+            `Failed to cleanup temporary directory on error: ${outputDir}`,
+            cleanupError
+          );
         }
       }
       throw error; // 重新抛出错误

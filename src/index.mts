@@ -20,6 +20,7 @@ import { executeFFmpegCommand } from "./modules/ffmpeg_tool.js";
 import { RestServerTransport } from "@wizdy/typescript-sdk/server/rest.js";
 import { getParamValue } from "@wizdy/typescript-sdk/utils/index.js";
 import { Request, Response } from "express";
+import { HostVideoToR2 } from "./modules/R2/VideoPipeline.js";
 
 const VERSION = "0.6.26";
 
@@ -182,6 +183,30 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         },
       },
       {
+        name: "upload_video_to_r2",
+        description:
+          "将本地视频文件（位于默认下载目录）上传到 Cloudflare R2，并返回视频 URL。",
+        inputSchema: {
+          type: "object",
+          properties: {
+            filename: {
+              type: "string",
+              description: "要上传的视频文件名 (例如：'my_video.mp4')",
+            },
+            tenantId: {
+              type: "string",
+              description:
+                "租户 ID，用于在 R2 中组织文件路径 (例如：'user123')",
+            },
+            customVideoId: {
+              type: "string",
+              description: "（可选）自定义视频 ID。如果未提供，将自动生成。",
+            },
+          },
+          required: ["filename", "tenantId"],
+        },
+      },
+      {
         name: "execute_ffmpeg_command",
         description:
           "执行用户提供的 FFmpeg 命令参数字符串。命令将在默认的视频下载目录中执行。用户需要提供 FFmpeg 命令本身之后的所有参数作为单个字符串。例如：'-i input.mp4 -vf scale=1280:720 output.mp4'。请确保输入/输出文件名正确，如果不是绝对路径，则它们是相对于下载目录的。由于 FFmpeg 功能强大且复杂，请谨慎构造命令参数。",
@@ -239,6 +264,9 @@ server.setRequestHandler(
       language?: string;
       resolution?: string;
       ffmpeg_args?: string;
+      filename?: string;
+      tenantId?: string;
+      customVideoId?: string;
     };
 
     if (toolName === "list_subtitle_languages") {
@@ -270,6 +298,31 @@ server.setRequestHandler(
       return handleToolExecution(
         () => downloadAudio(args.url, CONFIG),
         "Error downloading audio"
+      );
+    } else if (toolName === "upload_video_to_r2") {
+      if (
+        typeof args.filename !== "string" ||
+        typeof args.tenantId !== "string"
+      ) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: "Error: filename and tenantId must be strings.",
+            },
+          ],
+          isError: true,
+        };
+      }
+      const localVideoPath = path.join(CONFIG.file.downloadsDir, args.filename);
+      return handleToolExecution(
+        () =>
+          HostVideoToR2(
+            localVideoPath,
+            args.tenantId as string,
+            args.customVideoId
+          ),
+        "Error uploading video to R2"
       );
     } else if (toolName === "execute_ffmpeg_command") {
       if (typeof args.ffmpeg_args !== "string") {
