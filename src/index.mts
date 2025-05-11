@@ -183,9 +183,9 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         },
       },
       {
-        name: "upload_video_to_r2",
+        name: "publish_video",
         description:
-          "将本地视频文件（位于默认下载目录）上传到 Cloudflare R2，并返回视频 URL。",
+          "将本地视频文件（位于默认下载目录）发布到在线平台，生成一个可公开访问的 URL 以供观看。",
         inputSchema: {
           type: "object",
           properties: {
@@ -299,7 +299,7 @@ server.setRequestHandler(
         () => downloadAudio(args.url, CONFIG),
         "Error downloading audio"
       );
-    } else if (toolName === "upload_video_to_r2") {
+    } else if (toolName === "publish_video") {
       if (
         typeof args.filename !== "string" ||
         typeof args.tenantId !== "string"
@@ -322,7 +322,7 @@ server.setRequestHandler(
             args.tenantId as string,
             args.customVideoId
           ),
-        "Error uploading video to R2"
+        "Error publishing video"
       );
     } else if (toolName === "execute_ffmpeg_command") {
       if (typeof args.ffmpeg_args !== "string") {
