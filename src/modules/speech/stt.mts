@@ -235,9 +235,7 @@ export async function generateSrtSubtitles(
       console.log("Input is WAV, proceeding directly with whisperx.");
     }
 
-    console.log(
-      `Generating SRT subtitles via whisperx for: ${audioInputPath}`
-    );
+    console.log(`Generating SRT subtitles via whisperx for: ${audioInputPath}`);
     tempOutputDir = await fs.promises.mkdtemp(
       path.join(os.tmpdir(), "whisperx-srt-out-")
     );
@@ -258,6 +256,8 @@ export async function generateSrtSubtitles(
       "--suppress_numerals",
       "--verbose",
       "False",
+      "--chunk_size",
+      "7",
     ];
 
     if (language) {
@@ -304,7 +304,11 @@ export async function generateSrtSubtitles(
     console.error(`SRT generation processing failed: ${errorMessage}`);
     // Cleanup potential intermediate SRT if rename failed before this point
     if (srtOutputPath && fs.existsSync(srtOutputPath)) {
-        try { await fs.promises.unlink(srtOutputPath); } catch (e) { console.error(`Failed to clean up intermediate SRT: ${srtOutputPath}`); }
+      try {
+        await fs.promises.unlink(srtOutputPath);
+      } catch (e) {
+        console.error(`Failed to clean up intermediate SRT: ${srtOutputPath}`);
+      }
     }
     throw new Error(
       `WhisperX SRT generation failed for ${filename}. Error: ${errorMessage}`
