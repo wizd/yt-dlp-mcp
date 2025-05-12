@@ -18,7 +18,7 @@ export async function embedSubtitles(
   outputVideoPath: string,
   // 参考：https://ffmpeg.org/ffmpeg-filters.html#subtitles-1
   // 简单的样式，避免复杂转义。用户可以通过 execute_ffmpeg_command 自定义复杂样式。
-  styleOptions: string = "force_style='Alignment=10'" // ASS alignment: 10 for bottom center
+  styleOptions: string = "force_style='Alignment=2,MarginV=10'"
 ): Promise<void> {
   const downloadsDir = APP_CONFIG.file.downloadsDir; // Assuming ffmpeg runs relative to this dir or uses absolute paths
 
@@ -36,7 +36,9 @@ export async function embedSubtitles(
     // Correct syntax: filename='escaped_path':force_style='...'
     `subtitles=filename='${escapedSrtPathForFilter}':${styleOptions}`,
     "-c:a",
-    "copy", // Copy audio stream without re-encoding
+    "aac",
+    "-b:a",
+    "192k", // Set audio bitrate
     "-c:v",
     "libx264", // Re-encode video to embed subtitles
     "-crf",
