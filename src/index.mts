@@ -15,15 +15,16 @@ import { CONFIG } from "./config.js";
 import { _spawnPromise, safeCleanup } from "./modules/utils.js";
 import { downloadVideo } from "./modules/video.js";
 import { downloadAudio } from "./modules/audio.js";
-import { listSubtitles, downloadSubtitles } from "./modules/subtitle.js";
 import { executeFFmpegCommand } from "./modules/ffmpeg_tool.js";
 import { RestServerTransport } from "@wizdy/typescript-sdk/server/rest.js";
 import { getParamValue } from "@wizdy/typescript-sdk/utils/index.js";
 import { Request, Response } from "express";
 import { HostVideoToR2 } from "./modules/R2/VideoPipeline.js";
 import { BlaxelMcpServerTransport } from "@blaxel/core";
+import { speechToText } from "./modules/speech/stt.mjs";
+import { textToSpeech } from "./modules/speech/tts.mjs";
 
-const VERSION = "0.6.26";
+const VERSION = "0.6.27";
 
 const mode = getParamValue("MODE") || "stdio";
 const port = getParamValue("PORT") || 9591;
@@ -223,6 +224,53 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           required: ["ffmpeg_args"],
         },
       },
+      {
+        name: "speech_to_text",
+        description:
+          "使用 Azure Cognitive Services 将下载目录中的音频文件转换为文本。需要提供音频文件名，并可选择指定语言。",
+        inputSchema: {
+          type: "object",
+          properties: {
+            filename: {
+              type: "string",
+              description: "位于下载目录中的音频文件名 (例如：'my_audio.wav')",
+            },
+            language: {
+              type: "string",
+              description:
+                "(可选) 音频的语言代码 (例如：'en-US', 'zh-CN')。默认为 'en-US'。",
+            },
+          },
+          required: ["filename"],
+        },
+      },
+      {
+        name: "text_to_speech",
+        description:
+          "使用 Azure Cognitive Services 将文本合成为语音，并保存为 MP3 文件到下载目录。可以指定输出文件名、语言和语音。",
+        inputSchema: {
+          type: "object",
+          properties: {
+            text: { type: "string", description: "要合成为语音的文本。" },
+            output_filename: {
+              type: "string",
+              description:
+                "(可选) 输出的 MP3 文件名（不含扩展名）。默认为随机 UUID。",
+            },
+            language: {
+              type: "string",
+              description:
+                "(可选) 合成的语言代码 (例如：'en-US', 'zh-CN')。默认为 'en-US'。",
+            },
+            voice_name: {
+              type: "string",
+              description:
+                "(可选) 使用的语音名称 (例如：'en-US-AvaMultilingualNeural')。默认为配置的默认语音。",
+            },
+          },
+          required: ["text"],
+        },
+      },
     ],
   };
 });
@@ -261,35 +309,39 @@ server.setRequestHandler(
   async (request: CallToolRequest) => {
     const toolName = request.params.name;
     const args = request.params.arguments as {
-      url: string;
+      url?: string;
       language?: string;
       resolution?: string;
       ffmpeg_args?: string;
       filename?: string;
       tenantId?: string;
       customVideoId?: string;
+      text?: string;
+      output_filename?: string;
+      voice_name?: string;
     };
 
-    if (toolName === "list_subtitle_languages") {
-      return handleToolExecution(
-        () => listSubtitles(args.url),
-        "Error listing subtitle languages"
-      );
-    } else if (toolName === "download_video_subtitles") {
-      return handleToolExecution(
-        () =>
-          downloadSubtitles(
-            args.url,
-            args.language || CONFIG.download.defaultSubtitleLanguage,
-            CONFIG
-          ),
-        "Error downloading subtitles"
-      );
-    } else if (toolName === "download_video") {
+    // if (toolName === "list_subtitle_languages") {
+    //   return handleToolExecution(
+    //     () => listSubtitles(args.url),
+    //     "Error listing subtitle languages"
+    //   );
+    // } else if (toolName === "download_video_subtitles") {
+    //   return handleToolExecution(
+    //     () =>
+    //       downloadSubtitles(
+    //         args.url,
+    //         args.language || CONFIG.download.defaultSubtitleLanguage,
+    //         CONFIG
+    //       ),
+    //     "Error downloading subtitles"
+    //   );
+    // } else
+    if (toolName === "download_video") {
       return handleToolExecution(
         () =>
           downloadVideo(
-            args.url,
+            args.url as string,
             CONFIG,
             args.resolution as "480p" | "720p" | "1080p" | "best"
           ),
@@ -297,7 +349,7 @@ server.setRequestHandler(
       );
     } else if (toolName === "download_audio") {
       return handleToolExecution(
-        () => downloadAudio(args.url, CONFIG),
+        () => downloadAudio(args.url as string, CONFIG),
         "Error downloading audio"
       );
     } else if (toolName === "publish_video") {
@@ -337,6 +389,36 @@ server.setRequestHandler(
       return handleToolExecution(
         () => executeFFmpegCommand(args.ffmpeg_args as string),
         "Error executing FFmpeg command"
+      );
+    } else if (toolName === "speech_to_text") {
+      if (typeof args.filename !== "string") {
+        return {
+          content: [
+            { type: "text", text: "Error: filename must be a string." },
+          ],
+          isError: true,
+        };
+      }
+      return handleToolExecution(
+        () => speechToText(args.filename as string, args.language),
+        "Error performing speech-to-text"
+      );
+    } else if (toolName === "text_to_speech") {
+      if (typeof args.text !== "string") {
+        return {
+          content: [{ type: "text", text: "Error: text must be a string." }],
+          isError: true,
+        };
+      }
+      return handleToolExecution(
+        () =>
+          textToSpeech(
+            args.text as string,
+            args.output_filename,
+            args.language,
+            args.voice_name
+          ),
+        "Error performing text-to-speech"
       );
     } else {
       return {
