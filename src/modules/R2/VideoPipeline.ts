@@ -142,9 +142,6 @@ export async function HostVideoToR2(
 
   if (!fsNode.existsSync(localVideo)) {
     console.error(`Error: Video file not found at ${localVideo}`);
-    console.log(
-      "Please replace './path/to/your/sample-video.mp4' with an actual video file path."
-    );
     return;
   }
 
