@@ -21,8 +21,26 @@ export async function executeFFmpegCommand(
   }
 
   // Basic parsing for arguments, handles quoted arguments.
-  const parsedArgs =
+  const rawArgs =
     ffmpegArgsString.match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g) || [];
+
+  // Remove surrounding quotes from parsed arguments, as spawn expects unquoted args.
+  // For example, an argument like "-vf \"filter_details\"" would be parsed by regex as "\"filter_details\"".
+  // This step changes it to "filter_details" before passing to spawn.
+  const parsedArgs = rawArgs.map((arg) => {
+    if (arg.length >= 2) {
+      // Ensure arg has at least 2 characters for start/end quote
+      const firstChar = arg[0];
+      const lastChar = arg[arg.length - 1];
+      if (
+        (firstChar === '"' && lastChar === '"') ||
+        (firstChar === "'" && lastChar === "'")
+      ) {
+        return arg.substring(1, arg.length - 1);
+      }
+    }
+    return arg;
+  });
 
   if (parsedArgs.length === 0 && ffmpegArgsString.trim() !== "") {
     throw new Error(

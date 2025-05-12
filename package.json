@@ -41,15 +41,14 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.806.0",
     "@aws-sdk/s3-request-presigner": "^3.806.0",
+    "@blaxel/core": "^0.2.2",
     "@modelcontextprotocol/sdk": "0.7.0",
     "@wizdy/typescript-sdk": "^1.1.1",
     "cors": "^2.8.5",
     "dotenv": "^16.5.0",
     "express": "^5.1.0",
     "rimraf": "^6.0.1",
-    "spawn-rx": "^4.0.0",
-    "uuid": "^11.1.0",
-    "ws": "^8.18.2"
+    "spawn-rx": "^4.0.0"
   },
   "devDependencies": {
     "@jest/globals": "^29.7.0",
@@ -62,6 +61,8 @@
     "shx": "^0.3.4",
     "ts-jest": "^29.2.5",
     "ts-node": "^10.9.2",
-    "typescript": "^5.6.3"
+    "typescript": "^5.6.3",
+    "uuid": "^11.1.0",
+    "ws": "^8.18.2"
   }
 }

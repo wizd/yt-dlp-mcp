@@ -18,13 +18,10 @@ import { downloadAudio } from "./modules/audio.js";
 import { listSubtitles, downloadSubtitles } from "./modules/subtitle.js";
 import { executeFFmpegCommand } from "./modules/ffmpeg_tool.js";
 import { RestServerTransport } from "@wizdy/typescript-sdk/server/rest.js";
-import { WebSocketServerTransport } from "./server/websocket.js";
 import { getParamValue } from "@wizdy/typescript-sdk/utils/index.js";
 import { Request, Response } from "express";
 import { HostVideoToR2 } from "./modules/R2/VideoPipeline.js";
-import express from "express";
-import cors from "cors";
-import { createServer } from "http";
+import { BlaxelMcpServerTransport } from "@blaxel/core";
 
 const VERSION = "0.6.26";
 
@@ -408,55 +405,10 @@ async function runServer() {
       }`
     );
 
-    const app = express();
-    const corsOrigin = process.env.CORS_ORIGIN;
-    if (corsOrigin) {
-      console.log(`为 WebSocket 启用 CORS, origin: ${corsOrigin}`);
-      app.use(
-        cors({
-          origin: corsOrigin.includes(",") ? corsOrigin.split(",") : corsOrigin,
-        })
-      );
-    } else {
-      console.log("WebSocket 未配置 CORS origin (环境变量 CORS_ORIGIN 未设置)");
-    }
-
-    // 可选：添加 HTTP 健康检查端点
-    app.get(endpoint || "/health", (_req, res) => {
-      res.status(200).send("OK");
-    });
-
-    const httpServer = createServer(app);
-    const wsPath = endpoint && endpoint.startsWith("/") ? endpoint : "/ws"; //确保路径以 / 开头
-
-    const wsTransport = new WebSocketServerTransport({
-      server: httpServer,
-      path: wsPath,
-    });
-
-    // 设置事件监听器用于日志记录
-    wsTransport.onconnection = (clientId: string) => {
-      console.log(`WebSocket 客户端已连接: ${clientId}`);
-    };
-    wsTransport.ondisconnection = (clientId: string) => {
-      console.log(`WebSocket 客户端已断开连接: ${clientId}`);
-    };
-    wsTransport.onerror = (error: Error) => {
-      console.error(`WebSocket transport 发生错误: ${error.message}`, error);
-    };
-    wsTransport.onclose = () => {
-      console.log("WebSocket transport 已关闭");
-    };
-
+    const wsTransport = new BlaxelMcpServerTransport();
     try {
       await server.connect(wsTransport); // MCP Server 连接 transport
-      await wsTransport.start(); // 启动 WebSocket 服务器开始监听连接
-
-      httpServer.listen(port, () => {
-        console.log(
-          `yt-dlp-mcp MCP Server 运行在 WebSocket 模式，端口 ${port}, WebSocket 路径 ${wsTransport.path}`
-        );
-      });
+      console.info("Server started");
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
       console.error(`启动 WebSocket 服务失败: ${err.message}`, err);
