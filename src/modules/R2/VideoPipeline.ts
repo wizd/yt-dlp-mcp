@@ -165,6 +165,7 @@ export async function HostVideoToR2(
         hlsTime: 6, // 6秒一个片段
         s3KeyPrefix: tenantId + "_videos/hls", // 自定义S3路径前缀
         // hasInputAudio: true, // TODO: 实际应检测输入视频是否有音频
+        useGPUAcceleration: true,
       },
       customVideoId,
       true // 在成功上传后清理本地HLS文件

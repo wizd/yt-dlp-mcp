@@ -25,6 +25,7 @@ export interface FFmpegHLSProcessingOptions {
   baseTempDir?: string; // 存放HLS文件的基础临时目录。默认为 'os.tmpdir()/ffmpeg_hls_temp'。
   s3KeyPrefix?: string; // S3存储键的前缀，例如 "hls" 或 "videos/processed"
   hasInputAudio?: boolean; // 新增：指示输入视频是否包含音频流
+  useGPUAcceleration?: boolean; // 新增：是否启用GPU加速，例如使用NVENC
 }
 
 export interface HLSFile {
@@ -103,6 +104,7 @@ export class FFmpegService {
       options.baseTempDir || path.join(os.tmpdir(), "ffmpeg_hls_processing");
     const jobSpecificDirName = options.outputDirName || videoId; // 使用videoId作为子目录名
     const outputDir = path.join(baseTempDir, jobSpecificDirName);
+    const useGPU = !!options.useGPUAcceleration; // 检查是否启用GPU加速
 
     // 如果未指定 hasInputAudio，默认为 true (维持先前行为，假设有音频)
     // 调用者应通过 ffprobe 等工具检测后传入准确值
@@ -128,12 +130,26 @@ export class FFmpegService {
       let varStreamMap = "";
       renditions.forEach((rendition, index) => {
         args.push(`-map`, `[v${index}]`); // 映射处理后的视频流
-        args.push(`-c:v:${index}`, "libx264");
-        if (rendition.profile)
-          args.push(`-profile:v:${index}`, rendition.profile);
-        if (rendition.level) args.push(`-level:v:${index}`, rendition.level);
-        args.push(`-preset:v:${index}`, rendition.preset || "medium");
-        if (rendition.crf) args.push(`-crf:${index}`, rendition.crf.toString());
+
+        if (useGPU) {
+          args.push(`-c:v:${index}`, "h264_nvenc"); // 使用 NVIDIA GPU 编码
+          // 用户提供的 preset 应该兼容 nvenc，否则使用 nvenc 的 'medium'
+          // nvenc presets: p1-p7, default, slow, medium, fast, hp, hq, bd, ll, lossless etc.
+          args.push(`-preset:v:${index}`, rendition.preset || "medium");
+          if (rendition.profile)
+            args.push(`-profile:v:${index}`, rendition.profile); // Profile 和 Level 对 nvenc 也有效
+          if (rendition.level) args.push(`-level:v:${index}`, rendition.level);
+          // nvenc 不直接使用 -crf。质量主要由 -b:v 和 -preset 控制，或使用 -cq。此处我们忽略 crf。
+        } else {
+          args.push(`-c:v:${index}`, "libx264");
+          if (rendition.profile)
+            args.push(`-profile:v:${index}`, rendition.profile);
+          if (rendition.level) args.push(`-level:v:${index}`, rendition.level);
+          args.push(`-preset:v:${index}`, rendition.preset || "medium"); // libx264 presets
+          if (rendition.crf)
+            args.push(`-crf:${index}`, rendition.crf.toString());
+        }
+
         args.push(`-b:v:${index}`, rendition.videoBitrate);
         args.push(`-maxrate:${index}`, rendition.videoBitrate); // 可以根据需要调整
 

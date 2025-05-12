@@ -15,8 +15,8 @@ dependencies:
     specifier: 0.7.0
     version: 0.7.0
   '@wizdy/typescript-sdk':
-    specifier: ^1.0.7
-    version: 1.0.7
+    specifier: ^1.1.0
+    version: 1.1.0
   dotenv:
     specifier: ^16.5.0
     version: 16.5.0
@@ -1948,15 +1948,19 @@ packages:
       '@types/yargs-parser': 21.0.3
     dev: true
 
-  /@wizdy/typescript-sdk@1.0.7:
-    resolution: {integrity: sha512-g9HMsxbqq/sJkNO28XX8SMFZZgbYF7MCb0eBYLACt+LErgJJ/G37IDRFUZ8mnyvynrIkcpHemvHYMgwEk0tHvw==}
+  /@wizdy/typescript-sdk@1.1.0:
+    resolution: {integrity: sha512-oHPF3SBI9kix6dGjHIpiLaYXUxkgqVaJgQJRt/hKKwbHduMRO+eHsiGsShdL6lCEqQVxbOvRXvw2tmFizsrZFQ==}
     dependencies:
       '@modelcontextprotocol/sdk': 1.11.1
       content-type: 1.0.5
       express: 5.1.0
       raw-body: 3.0.0
+      uuid: 11.1.0
+      ws: 8.18.2
     transitivePeerDependencies:
+      - bufferutil
       - supports-color
+      - utf-8-validate
     dev: false
 
   /accepts@2.0.0:
@@ -4187,6 +4191,11 @@ packages:
       picocolors: 1.1.1
     dev: true
 
+  /uuid@11.1.0:
+    resolution: {integrity: sha512-0/A9rDy9P7cJ+8w1c9WD9V//9Wj15Ce2MPz8Ri6032usz+NfePxx5AcN3bN+r6ZL6jEo066/yNYB3tn4pQEx+A==}
+    hasBin: true
+    dev: false
+
   /uuid@9.0.1:
     resolution: {integrity: sha512-b+1eJOlsR9K8HJpow9Ok3fiWOWSIcIzXodvv0rQjVoOVNpWMpxf1wZNpt4y9h10odCNrqnYp1OBzRktckBe3sA==}
     hasBin: true
@@ -4250,6 +4259,19 @@ packages:
       imurmurhash: 0.1.4
       signal-exit: 3.0.7
     dev: true
+
+  /ws@8.18.2:
+    resolution: {integrity: sha512-DMricUmwGZUVr++AEAe2uiVM7UoO9MAVZMDu05UQOaUII0lp+zOzLLU4Xqh/JvTqklB1T4uELaaPBKyjE1r4fQ==}
+    engines: {node: '>=10.0.0'}
+    peerDependencies:
+      bufferutil: ^4.0.1
+      utf-8-validate: '>=5.0.2'
+    peerDependenciesMeta:
+      bufferutil:
+        optional: true
+      utf-8-validate:
+        optional: true
+    dev: false
 
   /y18n@5.0.8:
     resolution: {integrity: sha512-0pfFzegeDWJHJIAmTLRP2DwHjdF5s7jo9tuztdQxAhINCdvS+3nGINqPd00AphqJR/0LhANUS6/+7SCb98YOfA==}
