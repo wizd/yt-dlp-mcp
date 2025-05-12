@@ -18,9 +18,13 @@ import { downloadAudio } from "./modules/audio.js";
 import { listSubtitles, downloadSubtitles } from "./modules/subtitle.js";
 import { executeFFmpegCommand } from "./modules/ffmpeg_tool.js";
 import { RestServerTransport } from "@wizdy/typescript-sdk/server/rest.js";
+import { WebSocketServerTransport } from "./server/websocket.js";
 import { getParamValue } from "@wizdy/typescript-sdk/utils/index.js";
 import { Request, Response } from "express";
 import { HostVideoToR2 } from "./modules/R2/VideoPipeline.js";
+import express from "express";
+import cors from "cors";
+import { createServer } from "http";
 
 const VERSION = "0.6.26";
 
@@ -358,39 +362,31 @@ async function runServer() {
     const transport = new RestServerTransport({
       port,
       endpoint,
-      //supportTenantId: true, // 启用多租户支持
-      ...(apiKey ? { bearerToken: apiKey } : {}), // 仅在apiKey有值时启用认证
+      ...(apiKey ? { bearerToken: apiKey } : {}),
     });
     await server.connect(transport);
     await transport.startServer();
 
-    // 注册一个文件下载路由
     transport.registerRoute(
       "get",
       "/download/:filename",
       (req: Request, res: Response) => {
-        // Request 和 Response 类型现在与 express.RequestHandler 兼容
         const filename = req.params.filename;
         if (!filename) {
           res.status(400).send("Filename is required");
           return;
         }
-        // Ensure filename is just a filename and not a path
         const sanitizedFilename = path.basename(filename);
         if (sanitizedFilename !== filename) {
-          // Prevent directory traversal
           res.status(400).send("Invalid filename");
           return;
         }
         const downloadsDir = path.join(os.homedir(), "Downloads");
         const filePath = path.join(downloadsDir, sanitizedFilename);
 
-        console.log("want to download file from:", filePath);
-        // Check if file exists and then send
         if (fs.existsSync(filePath)) {
           res.download(filePath, sanitizedFilename, (err) => {
             if (err) {
-              // Handle error, but headers may have already been sent
               console.error("Error downloading file:", err);
               if (!res.headersSent) {
                 res.status(500).send("Error downloading file");
@@ -402,10 +398,70 @@ async function runServer() {
         }
       }
     );
-
     console.error(
       `yt-dlp-mcp MCP Server 运行在 REST 模式，端口 ${port}，endpoint ${endpoint}`
     );
+  } else if (mode === "ws") {
+    console.log(
+      `启动 WebSocket 模式，端口: ${port}, API key: ${
+        apiKey ? "已设置" : "未设置（认证已禁用）"
+      }`
+    );
+
+    const app = express();
+    const corsOrigin = process.env.CORS_ORIGIN;
+    if (corsOrigin) {
+      console.log(`为 WebSocket 启用 CORS, origin: ${corsOrigin}`);
+      app.use(
+        cors({
+          origin: corsOrigin.includes(",") ? corsOrigin.split(",") : corsOrigin,
+        })
+      );
+    } else {
+      console.log("WebSocket 未配置 CORS origin (环境变量 CORS_ORIGIN 未设置)");
+    }
+
+    // 可选：添加 HTTP 健康检查端点
+    app.get(endpoint || "/health", (_req, res) => {
+      res.status(200).send("OK");
+    });
+
+    const httpServer = createServer(app);
+    const wsPath = endpoint && endpoint.startsWith("/") ? endpoint : "/ws"; //确保路径以 / 开头
+
+    const wsTransport = new WebSocketServerTransport({
+      server: httpServer,
+      path: wsPath,
+    });
+
+    // 设置事件监听器用于日志记录
+    wsTransport.onconnection = (clientId: string) => {
+      console.log(`WebSocket 客户端已连接: ${clientId}`);
+    };
+    wsTransport.ondisconnection = (clientId: string) => {
+      console.log(`WebSocket 客户端已断开连接: ${clientId}`);
+    };
+    wsTransport.onerror = (error: Error) => {
+      console.error(`WebSocket transport 发生错误: ${error.message}`, error);
+    };
+    wsTransport.onclose = () => {
+      console.log("WebSocket transport 已关闭");
+    };
+
+    try {
+      await server.connect(wsTransport); // MCP Server 连接 transport
+      await wsTransport.start(); // 启动 WebSocket 服务器开始监听连接
+
+      httpServer.listen(port, () => {
+        console.log(
+          `yt-dlp-mcp MCP Server 运行在 WebSocket 模式，端口 ${port}, WebSocket 路径 ${wsTransport.path}`
+        );
+      });
+    } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      console.error(`启动 WebSocket 服务失败: ${err.message}`, err);
+      process.exit(1);
+    }
   } else {
     // 兼容原有 stdio 启动
     const transport = new StdioServerTransport();
