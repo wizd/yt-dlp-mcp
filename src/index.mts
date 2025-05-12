@@ -227,18 +227,19 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       {
         name: "speech_to_text",
         description:
-          "使用 Azure Cognitive Services 将下载目录中的音频文件转换为文本。需要提供音频文件名，并可选择指定语言。",
+          "使用 WhisperX (通过命令行) 将下载目录中的音频文件转换为文本。需要提供音频文件名，并可选择指定语言。确保已在系统中安装 whisperx 及其依赖项 (如 PyTorch, ffmpeg)。",
         inputSchema: {
           type: "object",
           properties: {
             filename: {
               type: "string",
-              description: "位于下载目录中的音频文件名 (例如：'my_audio.wav')",
+              description:
+                "位于下载目录中的音频文件名 (例如：'my_audio.m4a', 'audio.wav')",
             },
             language: {
               type: "string",
               description:
-                "(可选) 音频的语言代码 (例如：'en-US', 'zh-CN')。默认为 'en-US'。",
+                "(可选) 音频的 BCP-47 语言代码 (例如：'en', 'zh', 'ja')。如果省略，WhisperX 会尝试自动检测语言。",
             },
           },
           required: ["filename"],

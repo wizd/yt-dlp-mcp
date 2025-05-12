@@ -1,8 +1,7 @@
-import * as sdk from "microsoft-cognitiveservices-speech-sdk";
 import * as fs from "fs";
 import * as path from "path";
+import * as os from "os";
 import { v4 as uuidv4 } from "uuid";
-import { SPEECH_CONFIG } from "./config.mjs";
 import { CONFIG as APP_CONFIG } from "../../config.js";
 import { _spawnPromise } from "../utils.js";
 
@@ -30,11 +29,13 @@ async function convertToWav(
     "-ac",
     "1", // Output channels: mono
     outputPath,
+    "-y", // Overwrite output file if it exists
   ];
   console.log(
     `Converting to WAV: ffmpeg ${ffmpegArgs.join(" ")} in ${downloadsDir}`
   );
   try {
+    // Using absolute paths, cwd might not be strictly necessary but safer
     await _spawnPromise("ffmpeg", ffmpegArgs, { cwd: downloadsDir });
     console.log(`Successfully converted ${inputPath} to ${outputPath}`);
   } catch (error) {
@@ -43,7 +44,8 @@ async function convertToWav(
     // Attempt to clean up potentially incomplete output file
     if (fs.existsSync(outputPath)) {
       try {
-        fs.unlinkSync(outputPath);
+        // Use async unlink for consistency if available, otherwise sync is fine in cleanup
+        await fs.promises.unlink(outputPath);
       } catch (cleanupError) {
         console.error(
           `Failed to cleanup temp WAV file ${outputPath}: ${cleanupError}`
@@ -57,26 +59,18 @@ async function convertToWav(
 }
 
 /**
- * Perform Speech-to-Text (STT) on a local audio file (WAV, MP3, M4A).
+ * Perform Speech-to-Text (STT) on a local audio file using WhisperX CLI.
  * Converts non-WAV formats to a temporary WAV file using FFmpeg before processing.
- * @param filename - The name of the audio file (e.g., 'my_audio.wav', 'my_audio.mp3') in the downloads directory.
- * @param language - Optional language code (e.g., 'en-US', 'zh-CN'). Defaults to SPEECH_CONFIG.defaultRecognitionLanguage.
+ * Requires whisperx to be installed and accessible in the system PATH.
+ * @param filename - The name of the audio file (e.g., 'my_audio.wav', 'my_audio.mp3', 'my_audio.m4a') in the downloads directory.
+ * @param language - Optional language code (e.g., 'en', 'zh', 'ja'). If omitted, whisperx will attempt auto-detection.
  * @returns The recognized text.
- * @throws If Azure credentials are not set, file doesn't exist, conversion fails, or recognition fails.
+ * @throws If file doesn't exist, conversion fails, or whisperx execution fails.
  */
 export async function speechToText(
   filename: string,
   language?: string
 ): Promise<string> {
-  if (
-    SPEECH_CONFIG.key === "YOUR_AZURE_SPEECH_KEY" ||
-    SPEECH_CONFIG.region === "YOUR_AZURE_SPEECH_REGION"
-  ) {
-    throw new Error(
-      "Azure Speech Key or Region not configured. Please set environment variables or update config."
-    );
-  }
-
   const downloadsDir = APP_CONFIG.file.downloadsDir;
   const originalAudioPath = path.join(downloadsDir, filename);
   const fileExtension = path.extname(filename).toLowerCase();
@@ -85,90 +79,119 @@ export async function speechToText(
     throw new Error(`Audio file not found: ${originalAudioPath}`);
   }
 
-  let audioInputPath = originalAudioPath; // Path to be used by Azure SDK
+  let audioInputPath = originalAudioPath; // Path to be used by whisperx
   let tempWavPath: string | null = null;
+  let tempOutputDir: string | null = null; // For whisperx output
 
   try {
-    // --- Conversion Step ---
-    if (fileExtension === ".mp3" || fileExtension === ".m4a") {
-      // Add other formats like m4a if needed
-      console.log(`Format requires conversion: ${fileExtension}`);
+    // --- Conversion Step (Kept for broader compatibility) ---
+    if (fileExtension !== ".wav") {
+      console.log(
+        `Input is not WAV (${fileExtension}). Converting to 16kHz mono WAV for whisperx.`
+      );
       tempWavPath = path.join(downloadsDir, `${uuidv4()}.wav`);
       await convertToWav(originalAudioPath, tempWavPath, downloadsDir);
-      audioInputPath = tempWavPath; // Use the converted WAV for recognition
-    } else if (fileExtension !== ".wav") {
-      throw new Error(
-        `Unsupported audio format: ${fileExtension}. Only .wav, .mp3, .m4a are currently supported.`
-      );
+      audioInputPath = tempWavPath; // Use the converted WAV
+    } else {
+      console.log("Input is WAV, proceeding directly with whisperx.");
     }
     // --- End Conversion Step ---
 
-    // --- Azure Recognition Step ---
-    console.log(`Performing speech recognition on: ${audioInputPath}`);
-    const speechConfig = sdk.SpeechConfig.fromSubscription(
-      SPEECH_CONFIG.key,
-      SPEECH_CONFIG.region
+    // --- WhisperX Recognition Step ---
+    console.log(
+      `Performing speech recognition via whisperx on: ${audioInputPath}`
     );
-    speechConfig.speechRecognitionLanguage =
-      language || SPEECH_CONFIG.defaultRecognitionLanguage;
-
-    // Always use fromWavFileInput, now pointing to either original WAV or temp WAV
-    const audioConfig = sdk.AudioConfig.fromWavFileInput(
-      fs.readFileSync(audioInputPath)
+    tempOutputDir = await fs.promises.mkdtemp(
+      path.join(os.tmpdir(), "whisperx-out-")
     );
-    const recognizer = new sdk.SpeechRecognizer(speechConfig, audioConfig);
 
-    return await new Promise((resolve, reject) => {
-      recognizer.recognizeOnceAsync(
-        (result) => {
-          recognizer.close(); // Close recognizer regardless of outcome
-          // Note: We don't explicitly close audioConfig here when using fromWavFileInput
-          // as it reads the whole buffer. Closing is crucial for streams.
-          if (result.reason === sdk.ResultReason.RecognizedSpeech) {
-            console.log(`Recognition successful: ${result.text}`);
-            resolve(result.text);
-          } else if (result.reason === sdk.ResultReason.NoMatch) {
-            console.error("Recognition failed: NoMatch");
-            reject(
-              new Error(
-                `NOMATCH: Speech could not be recognized. Reason: ${
-                  sdk.CancellationReason[result.reason]
-                }`
-              )
-            );
-          } else {
-            const cancellation = sdk.CancellationDetails.fromResult(result);
-            console.error(
-              `Recognition failed: CANCELED. Reason=${cancellation.reason}. ErrorCode=${cancellation.ErrorCode}. Details=${cancellation.errorDetails}`
-            );
-            reject(
-              new Error(
-                `CANCELED: Reason=${cancellation.reason}. ErrorCode=${cancellation.ErrorCode}. ErrorDetails=${cancellation.errorDetails}`
-              )
-            );
-          }
-        },
-        (err) => {
-          recognizer.close(); // Ensure closure on error
-          console.error(`Recognition failed with error: ${err}`);
-          reject(new Error(`Recognition failed: ${err}`));
-        }
+    const whisperxArgs = [
+      "whisperx",
+      audioInputPath,
+      "--output_dir",
+      tempOutputDir,
+      "--output_format",
+      "txt",
+      "--model",
+      "large-v2", // High accuracy model
+      "--compute_type",
+      "int8", // Good balance for CPU/GPU compatibility
+      "--condition_on_previous_text",
+      "False",
+      "--suppress_numerals",
+      "--verbose",
+      "False",
+    ];
+
+    if (language) {
+      whisperxArgs.push("--language", language);
+      console.log(`Using specified language for whisperx: ${language}`);
+    } else {
+      console.log(
+        "No language specified; whisperx will attempt auto-detection."
       );
-    });
-    // --- End Azure Recognition Step ---
+    }
+
+    console.log(
+      `Executing whisperx command: whisperx ${whisperxArgs.join(" ")}`
+    );
+
+    // Execute whisperx via command line
+    // Ensure _spawnPromise throws on error (non-zero exit code)
+    await _spawnPromise("uvx", whisperxArgs);
+
+    // Construct the expected output file path
+    const outputTxtFilename =
+      path.basename(audioInputPath, path.extname(audioInputPath)) + ".txt";
+    const outputTxtPath = path.join(tempOutputDir, outputTxtFilename);
+
+    if (!fs.existsSync(outputTxtPath)) {
+      throw new Error(
+        `WhisperX command completed, but the expected output file was not found: ${outputTxtPath}. Check whisperx logs or permissions.`
+      );
+    }
+
+    // Read the result from the generated text file
+    const recognizedText = await fs.promises.readFile(outputTxtPath, "utf-8");
+    console.log(
+      `WhisperX recognition successful. Output read from: ${outputTxtPath}`
+    );
+
+    return recognizedText.trim();
+    // --- End WhisperX Recognition Step ---
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error(`Speech-to-text processing failed: ${errorMessage}`);
+    // Optionally log the full error: console.error(error);
+    throw new Error(
+      `WhisperX STT failed for ${filename}. Error: ${errorMessage}`
+    );
   } finally {
     // --- Cleanup Step ---
+    console.log("Cleaning up temporary files...");
     if (tempWavPath && fs.existsSync(tempWavPath)) {
       try {
-        fs.unlinkSync(tempWavPath);
+        await fs.promises.unlink(tempWavPath);
         console.log(`Successfully deleted temporary WAV file: ${tempWavPath}`);
       } catch (cleanupError) {
         console.error(
           `Failed to delete temporary WAV file ${tempWavPath}: ${cleanupError}`
         );
-        // Log error but don't throw, as recognition might have succeeded
       }
     }
+    if (tempOutputDir) {
+      try {
+        await fs.promises.rm(tempOutputDir, { recursive: true, force: true });
+        console.log(
+          `Successfully deleted temporary output directory: ${tempOutputDir}`
+        );
+      } catch (cleanupError) {
+        console.error(
+          `Failed to delete temporary output directory ${tempOutputDir}: ${cleanupError}`
+        );
+      }
+    }
+    console.log("Cleanup finished.");
     // --- End Cleanup Step ---
   }
 }
