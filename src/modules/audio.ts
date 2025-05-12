@@ -2,22 +2,27 @@ import { readdirSync } from "fs";
 import * as path from "path";
 import type { Config } from "../config.js";
 import { sanitizeFilename } from "../config.js";
-import { _spawnPromise, validateUrl, getFormattedTimestamp, isYouTubeUrl } from "./utils.js";
+import {
+  _spawnPromise,
+  validateUrl,
+  isYouTubeUrl,
+  generateRandomFilename,
+} from "./utils.js";
 
 /**
  * Downloads audio from a video URL in the best available quality.
- * 
+ *
  * @param url - The URL of the video to extract audio from
  * @param config - Configuration object for download settings
  * @returns Promise resolving to a success message with the downloaded file path
  * @throws {Error} When URL is invalid or download fails
- * 
+ *
  * @example
  * ```typescript
  * // Download audio with default settings
  * const result = await downloadAudio('https://youtube.com/watch?v=...');
  * console.log(result);
- * 
+ *
  * // Download audio with custom config
  * const customResult = await downloadAudio('https://youtube.com/watch?v=...', {
  *   file: {
@@ -28,18 +33,22 @@ import { _spawnPromise, validateUrl, getFormattedTimestamp, isYouTubeUrl } from 
  * console.log(customResult);
  * ```
  */
-export async function downloadAudio(url: string, config: Config): Promise<string> {
-  const timestamp = getFormattedTimestamp();
-  
+export async function downloadAudio(
+  url: string,
+  config: Config
+): Promise<string> {
   try {
     validateUrl(url);
-    
+
+    const randomFileBaseName = generateRandomFilename().replace(/\.\w+$/, "");
+    const sanitizedFileBase = sanitizeFilename(randomFileBaseName, config.file);
+
     const outputTemplate = path.join(
       config.file.downloadsDir,
-      sanitizeFilename(`%(title)s [%(id)s] ${timestamp}`, config.file) + '.%(ext)s'
+      sanitizedFileBase + ".%(ext)s"
     );
 
-    const format = isYouTubeUrl(url) 
+    const format = isYouTubeUrl(url)
       ? "140/bestaudio[ext=m4a]/bestaudio"
       : "bestaudio[ext=m4a]/bestaudio[ext=mp3]/bestaudio";
 
@@ -54,7 +63,6 @@ export async function downloadAudio(url: string, config: Config): Promise<string
       outputTemplate,
     ];
 
-    // 如果是YouTube视频，添加cookies以通过bot验证
     if (isYouTubeUrl(url)) {
       const cookiePath = path.resolve(
         new URL(import.meta.url).pathname,
@@ -68,11 +76,31 @@ export async function downloadAudio(url: string, config: Config): Promise<string
     await _spawnPromise("yt-dlp", args);
 
     const files = readdirSync(config.file.downloadsDir);
-    const downloadedFile = files.find(file => file.includes(timestamp));
+    const downloadedFile = files.find((file) =>
+      file.startsWith(sanitizedFileBase)
+    );
     if (!downloadedFile) {
-      throw new Error("Download completed but file not found");
+      throw new Error(
+        `Download completed but file starting with "${sanitizedFileBase}" not found`
+      );
     }
-    return `Audio successfully downloaded as "${downloadedFile}" to ${config.file.downloadsDir}`;
+    const downloadedFilePath = path.join(
+      config.file.downloadsDir,
+      downloadedFile
+    );
+
+    console.log(
+      `Audio downloaded, path: ${config.file.hostingUrlBase}/${path.basename(
+        downloadedFilePath
+      )}`
+    );
+
+    return `Audio successfully downloaded as ${downloadedFile} to ${
+      config.file.downloadsDir
+    }.
+    You can access it via url: ${config.file.hostingUrlBase}/${path.basename(
+      downloadedFilePath
+    )}`;
   } catch (error) {
     throw error;
   }

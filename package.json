@@ -43,7 +43,7 @@
     "@aws-sdk/s3-request-presigner": "^3.806.0",
     "@blaxel/core": "^0.2.2",
     "@modelcontextprotocol/sdk": "0.7.0",
-    "@wizdy/typescript-sdk": "^1.1.1",
+    "@wizdy/typescript-sdk": "^1.1.2",
     "cors": "^2.8.5",
     "dotenv": "^16.5.0",
     "express": "^5.1.0",

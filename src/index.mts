@@ -124,7 +124,7 @@ const server = new Server(
 server.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
     tools: [
-      {
+      /*      {
         name: "list_subtitle_languages",
         description:
           "使用 yt-dlp 列出视频所有可用的字幕语言及其格式（包括自动生成的字幕）。得益于 yt-dlp 的强大功能，此工具支持从超过 1800 个网站获取字幕信息。",
@@ -152,7 +152,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           },
           required: ["url"],
         },
-      },
+      },*/
       {
         name: "download_video",
         description:
@@ -359,7 +359,7 @@ async function runServer() {
     const transport = new RestServerTransport({
       port,
       endpoint,
-      ...(apiKey ? { bearerToken: apiKey } : {}),
+      //...(apiKey ? { bearerToken: apiKey } : {}),
     });
     await server.connect(transport);
     await transport.startServer();
