@@ -22,6 +22,8 @@ import { Request, Response } from "express";
 import { HostVideoToR2 } from "./modules/R2/VideoPipeline.js";
 import { BlaxelMcpServerTransport } from "@blaxel/core";
 import { speechToText } from "./modules/speech/stt.mjs";
+import { generateSrtSubtitles } from "./modules/speech/stt.mjs";
+import { embedSubtitles } from "./modules/subtitles.mjs";
 import { textToSpeech } from "./modules/speech/tts.mjs";
 
 const VERSION = "0.6.27";
@@ -272,6 +274,32 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           required: ["text"],
         },
       },
+      {
+        name: "add_subtitles_to_video",
+        description:
+          "使用 WhisperX 为下载目录中的视频文件生成 SRT 字幕，并使用 FFmpeg 将字幕嵌入视频中。输出带有字幕的新视频文件。",
+        inputSchema: {
+          type: "object",
+          properties: {
+            input_filename: {
+              type: "string",
+              description:
+                "位于下载目录中的原始视频文件名 (例如：'my_video.mp4')",
+            },
+            output_filename: {
+              type: "string",
+              description:
+                "(可选) 输出的带字幕视频文件名 (不含路径，例如：'my_video_subtitled.mp4')。如果省略，将基于输入文件名自动生成。",
+            },
+            language: {
+              type: "string",
+              description:
+                "(可选) 视频中语音的 BCP-47 语言代码 (例如：'en', 'zh', 'ja')。如果省略，WhisperX 会尝试自动检测语言。",
+            },
+          },
+          required: ["input_filename"],
+        },
+      },
     ],
   };
 });
@@ -320,6 +348,7 @@ server.setRequestHandler(
       text?: string;
       output_filename?: string;
       voice_name?: string;
+      input_filename?: string;
     };
 
     // if (toolName === "list_subtitle_languages") {
@@ -421,6 +450,87 @@ server.setRequestHandler(
           ),
         "Error performing text-to-speech"
       );
+    } else if (toolName === "add_subtitles_to_video") {
+      if (typeof args.input_filename !== "string") {
+        return {
+          content: [
+            {
+              type: "text",
+              text: "Error: input_filename must be a string.",
+            },
+          ],
+          isError: true,
+        };
+      }
+
+      const inputVideoFilename = args.input_filename;
+      const outputVideoFilename = args.output_filename;
+      const language = args.language;
+
+      return handleToolExecution(async () => {
+        const downloadsDir = CONFIG.file.downloadsDir;
+        const inputVideoPath = path.join(downloadsDir, inputVideoFilename);
+
+        if (!fs.existsSync(inputVideoPath)) {
+          throw new Error(`Input video file not found: ${inputVideoPath}`);
+        }
+
+        console.log(`Starting SRT generation for ${inputVideoFilename}`);
+        const srtPath = await generateSrtSubtitles(
+          inputVideoFilename,
+          language
+        );
+        console.log(`SRT file generated at: ${srtPath}`);
+
+        // 2. Determine output video path
+        let finalOutputVideoPath: string;
+        const inputBasename = path.basename(
+          inputVideoFilename,
+          path.extname(inputVideoFilename)
+        );
+        // Always output as MP4 when embedding subtitles with libx264 for compatibility
+        const outputExt = ".mp4";
+        const defaultOutputFilename = `${inputBasename}_subtitled${outputExt}`;
+
+        if (outputVideoFilename) {
+          // If user specified output, ensure it has .mp4 extension for consistency
+          // We prioritize compatibility by enforcing MP4 output here.
+          const userOutputBasename = path.basename(
+            outputVideoFilename,
+            path.extname(outputVideoFilename)
+          );
+          finalOutputVideoPath = path.join(
+            downloadsDir,
+            `${userOutputBasename}${outputExt}`
+          );
+          console.warn(
+            `User-specified output filename modified to ensure .mp4 extension: ${path.basename(
+              finalOutputVideoPath
+            )}`
+          );
+        } else {
+          finalOutputVideoPath = path.join(downloadsDir, defaultOutputFilename);
+        }
+
+        // 3. Embed subtitles
+        console.log(
+          `Embedding subtitles from ${srtPath} into ${inputVideoPath}, output to ${finalOutputVideoPath}`
+        );
+        await embedSubtitles(inputVideoPath, srtPath, finalOutputVideoPath);
+
+        try {
+          await fs.promises.unlink(srtPath);
+          console.log(`Cleaned up temporary SRT file: ${srtPath}`);
+        } catch (cleanupError) {
+          console.warn(
+            `Failed to clean up temporary SRT file ${srtPath}: ${cleanupError}`
+          );
+        }
+
+        const outputBaseName = path.basename(finalOutputVideoPath);
+        return `Subtitles successfully added. Output video: ${outputBaseName}. \
+Access it via URL: ${CONFIG.file.hostingUrlBase}/${outputBaseName}`;
+      }, "Error adding subtitles to video");
     } else {
       return {
         content: [{ type: "text", text: `Unknown tool: ${toolName}` }],

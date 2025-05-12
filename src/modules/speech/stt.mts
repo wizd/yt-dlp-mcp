@@ -195,3 +195,144 @@ export async function speechToText(
     // --- End Cleanup Step ---
   }
 }
+
+/**
+ * Generate SRT subtitles for a local audio file using WhisperX CLI.
+ * Converts non-WAV formats to a temporary WAV file using FFmpeg before processing.
+ * Requires whisperx to be installed and accessible in the system PATH.
+ *
+ * @param filename - The name of the audio file (e.g., 'my_audio.mp3') in the downloads directory.
+ * @param language - Optional language code (e.g., 'en', 'zh'). If omitted, whisperx will auto-detect.
+ * @returns The full path to the generated SRT file.
+ * @throws If file doesn't exist, conversion fails, or whisperx execution fails.
+ */
+export async function generateSrtSubtitles(
+  filename: string,
+  language?: string
+): Promise<string> {
+  const downloadsDir = APP_CONFIG.file.downloadsDir;
+  const originalAudioPath = path.join(downloadsDir, filename);
+  const fileExtension = path.extname(filename).toLowerCase();
+
+  if (!fs.existsSync(originalAudioPath)) {
+    throw new Error(`Audio file not found: ${originalAudioPath}`);
+  }
+
+  let audioInputPath = originalAudioPath;
+  let tempWavPath: string | null = null;
+  let tempOutputDir: string | null = null;
+  let srtOutputPath: string | null = null; // Store the final SRT path
+
+  try {
+    if (fileExtension !== ".wav") {
+      console.log(
+        `Input is not WAV (${fileExtension}). Converting to 16kHz mono WAV for whisperx.`
+      );
+      tempWavPath = path.join(downloadsDir, `${uuidv4()}.wav`);
+      await convertToWav(originalAudioPath, tempWavPath, downloadsDir);
+      audioInputPath = tempWavPath;
+    } else {
+      console.log("Input is WAV, proceeding directly with whisperx.");
+    }
+
+    console.log(
+      `Generating SRT subtitles via whisperx for: ${audioInputPath}`
+    );
+    tempOutputDir = await fs.promises.mkdtemp(
+      path.join(os.tmpdir(), "whisperx-srt-out-")
+    );
+
+    const whisperxArgs = [
+      "whisperx",
+      audioInputPath,
+      "--output_dir",
+      tempOutputDir,
+      "--output_format", // Specify SRT output
+      "srt",
+      "--model",
+      "large-v2",
+      "--compute_type",
+      "int8",
+      "--condition_on_previous_text",
+      "False",
+      "--suppress_numerals",
+      "--verbose",
+      "False",
+    ];
+
+    if (language) {
+      whisperxArgs.push("--language", language);
+      console.log(`Using specified language for whisperx: ${language}`);
+    } else {
+      console.log(
+        "No language specified; whisperx will attempt auto-detection."
+      );
+    }
+
+    console.log(
+      `Executing whisperx command: whisperx ${whisperxArgs.join(" ")}`
+    );
+
+    // Ensure _spawnPromise throws on error
+    await _spawnPromise("uvx", whisperxArgs);
+
+    const outputSrtFilename =
+      path.basename(audioInputPath, path.extname(audioInputPath)) + ".srt";
+    const generatedSrtPath = path.join(tempOutputDir, outputSrtFilename);
+
+    if (!fs.existsSync(generatedSrtPath)) {
+      throw new Error(
+        `WhisperX command completed, but the expected SRT file was not found: ${generatedSrtPath}.`
+      );
+    }
+
+    // Move the SRT file to the downloads directory for persistence and easier access
+    const finalSrtFilename = `${path.basename(
+      filename,
+      path.extname(filename)
+    )}_${uuidv4()}.srt`;
+    srtOutputPath = path.join(downloadsDir, finalSrtFilename);
+    await fs.promises.rename(generatedSrtPath, srtOutputPath);
+
+    console.log(
+      `WhisperX SRT generation successful. Output saved to: ${srtOutputPath}`
+    );
+
+    return srtOutputPath; // Return the final path in downloadsDir
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error(`SRT generation processing failed: ${errorMessage}`);
+    // Cleanup potential intermediate SRT if rename failed before this point
+    if (srtOutputPath && fs.existsSync(srtOutputPath)) {
+        try { await fs.promises.unlink(srtOutputPath); } catch (e) { console.error(`Failed to clean up intermediate SRT: ${srtOutputPath}`); }
+    }
+    throw new Error(
+      `WhisperX SRT generation failed for ${filename}. Error: ${errorMessage}`
+    );
+  } finally {
+    console.log("Cleaning up temporary files for SRT generation...");
+    if (tempWavPath && fs.existsSync(tempWavPath)) {
+      try {
+        await fs.promises.unlink(tempWavPath);
+        console.log(`Successfully deleted temporary WAV file: ${tempWavPath}`);
+      } catch (cleanupError) {
+        console.error(
+          `Failed to delete temporary WAV file ${tempWavPath}: ${cleanupError}`
+        );
+      }
+    }
+    if (tempOutputDir) {
+      try {
+        await fs.promises.rm(tempOutputDir, { recursive: true, force: true });
+        console.log(
+          `Successfully deleted temporary output directory: ${tempOutputDir}`
+        );
+      } catch (cleanupError) {
+        console.error(
+          `Failed to delete temporary output directory ${tempOutputDir}: ${cleanupError}`
+        );
+      }
+    }
+    console.log("SRT generation cleanup finished.");
+  }
+}
