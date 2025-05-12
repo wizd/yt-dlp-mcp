@@ -25,6 +25,8 @@ import { speechToText } from "./modules/speech/stt.mjs";
 import { generateSrtSubtitles } from "./modules/speech/stt.mjs";
 import { embedSubtitles } from "./modules/subtitles.mjs";
 import { textToSpeech } from "./modules/speech/tts.mjs";
+import { executeWhisperxCommand } from "./modules/whisperx_tool.mjs";
+import { readFileContent, writeFileContent } from "./modules/file_io.mjs";
 
 const VERSION = "0.6.27";
 
@@ -300,6 +302,57 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           required: ["input_filename"],
         },
       },
+      {
+        name: "execute_whisperx_command",
+        description:
+          "执行用户提供的 WhisperX 命令参数字符串 (通过 uvx 运行)。命令将在默认的视频下载目录中执行。用户需要提供 whisperx 命令本身之后的所有参数作为单个字符串。例如：'audio.mp3 --model large-v2 --language ja --output_format all'。请确保输入/输出文件名正确，如果不是绝对路径，则它们是相对于下载目录的。由于 WhisperX 参数复杂，请谨慎构造命令参数。",
+        inputSchema: {
+          type: "object",
+          properties: {
+            whisperx_args: {
+              type: "string",
+              description:
+                "要传递给 WhisperX 的完整参数字符串 (例如：'audio.m4a --language en --model medium.en --output_dir output_folder --output_format txt')",
+            },
+          },
+          required: ["whisperx_args"],
+        },
+      },
+      {
+        name: "read_file",
+        description: "从默认下载目录读取指定文本文件的内容。",
+        inputSchema: {
+          type: "object",
+          properties: {
+            filename: {
+              type: "string",
+              description:
+                "位于下载目录中的文件名 (例如：'my_document.txt', 'subtitles/english.srt')。不允许使用 '..' 或绝对路径。",
+            },
+          },
+          required: ["filename"],
+        },
+      },
+      {
+        name: "write_file",
+        description:
+          "将文本内容写入到默认下载目录中的指定文件。如果文件已存在，它将被覆盖。如果路径中的目录不存在，会尝试创建它们。",
+        inputSchema: {
+          type: "object",
+          properties: {
+            filename: {
+              type: "string",
+              description:
+                "要写入的文件名，位于下载目录中 (例如：'new_notes.txt', 'data/output.json')。不允许使用 '..' 或绝对路径。",
+            },
+            content: {
+              type: "string",
+              description: "要写入文件的文本内容。",
+            },
+          },
+          required: ["filename", "content"],
+        },
+      },
     ],
   };
 });
@@ -349,6 +402,8 @@ server.setRequestHandler(
       output_filename?: string;
       voice_name?: string;
       input_filename?: string;
+      whisperx_args?: string;
+      content?: string;
     };
 
     // if (toolName === "list_subtitle_languages") {
@@ -518,6 +573,7 @@ server.setRequestHandler(
         );
         await embedSubtitles(inputVideoPath, srtPath, finalOutputVideoPath);
 
+        // 4. Cleanup SRT file
         try {
           await fs.promises.unlink(srtPath);
           console.log(`Cleaned up temporary SRT file: ${srtPath}`);
@@ -531,6 +587,54 @@ server.setRequestHandler(
         return `Subtitles successfully added. Output video: ${outputBaseName}. \
 Access it via URL: ${CONFIG.file.hostingUrlBase}/${outputBaseName}`;
       }, "Error adding subtitles to video");
+    } else if (toolName === "execute_whisperx_command") {
+      if (typeof args.whisperx_args !== "string") {
+        return {
+          content: [
+            {
+              type: "text",
+              text: "Error: whisperx_args must be a string.",
+            },
+          ],
+          isError: true,
+        };
+      }
+      return handleToolExecution(
+        () => executeWhisperxCommand(args.whisperx_args as string),
+        "Error executing WhisperX command"
+      );
+    } else if (toolName === "read_file") {
+      if (typeof args.filename !== "string") {
+        return {
+          content: [
+            { type: "text", text: "Error: filename must be a string." },
+          ],
+          isError: true,
+        };
+      }
+      return handleToolExecution(
+        () => readFileContent(args.filename as string),
+        "Error reading file"
+      );
+    } else if (toolName === "write_file") {
+      if (
+        typeof args.filename !== "string" ||
+        typeof args.content !== "string"
+      ) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: "Error: filename and content must be strings.",
+            },
+          ],
+          isError: true,
+        };
+      }
+      return handleToolExecution(
+        () => writeFileContent(args.filename as string, args.content as string),
+        "Error writing file"
+      );
     } else {
       return {
         content: [{ type: "text", text: `Unknown tool: ${toolName}` }],
