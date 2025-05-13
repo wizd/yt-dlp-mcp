@@ -40,11 +40,11 @@ export async function embedSubtitles(
     "-b:a",
     "192k", // Set audio bitrate
     "-c:v",
-    "libx264", // Re-encode video to embed subtitles
-    "-crf",
-    "23", // Constant Rate Factor (quality, lower is better, 18-28 is typical)
+    "h264_nvenc", // 使用 NVIDIA NVENC 编码器
+    "-cq", // 使用恒定质量模式 (Constant Quality)
+    "23", // 质量级别 (类似 CRF，但用于 NVENC, 范围通常 0-51, 越低越好)
     "-preset",
-    "fast", // Encoding speed preset (faster encoding, larger file)
+    "fast", // 编码速度预设 (NVENC 支持: p1-p7/slow/medium/fast/...)
     outputVideoPath, // Output video
     "-y", // Overwrite output file if it exists
   ];

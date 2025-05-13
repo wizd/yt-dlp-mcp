@@ -257,7 +257,7 @@ export async function generateSrtSubtitles(
       "--verbose",
       "False",
       "--chunk_size",
-      "7",
+      "6",
     ];
 
     if (language) {
