@@ -1,5 +1,6 @@
 import { CONFIG } from "../config.js";
 import { _spawnPromise } from "./utils.js";
+import stringArgv from "string-argv";
 
 /**
  * Executes a WhisperX command with the given arguments string.
@@ -20,28 +21,25 @@ export async function executeWhisperxCommand(
     throw new Error("WhisperX arguments string cannot be empty.");
   }
 
-  // Basic parsing for arguments, handles quoted arguments.
-  // Similar to ffmpeg_tool.ts
-  const rawArgs =
-    whisperxUserArgsString.match(/(?:[\S"']+|"[^"]*"|'[^']*')+/g) || [];
-
-  const parsedUserArgs = rawArgs.map((arg) => {
-    if (arg.length >= 2) {
-      const firstChar = arg[0];
-      const lastChar = arg[arg.length - 1];
-      if (
-        (firstChar === '"' && lastChar === '"') ||
-        (firstChar === "'" && lastChar === "'")
-      ) {
-        return arg.substring(1, arg.length - 1);
-      }
-    }
-    return arg;
-  });
+  // Use string-argv to parse the arguments string into an array,
+  // handling quotes and escapes robustly.
+  let parsedUserArgs: string[];
+  try {
+    parsedUserArgs = stringArgv(whisperxUserArgsString);
+  } catch (e: unknown) {
+    // string-argv throws an error for unmatched quotes or other parsing issues
+    throw new Error(
+      `Could not parse whisperx_args: "${whisperxUserArgsString}". ` +
+        `Error: ${
+          e instanceof Error ? e.message : String(e)
+        }. Ensure quotes are balanced and arguments are correctly formatted.`
+    );
+  }
 
   if (parsedUserArgs.length === 0 && whisperxUserArgsString.trim() !== "") {
     throw new Error(
       `Could not parse whisperx_args: "${whisperxUserArgsString}". ` +
+        `The arguments string was not empty but resulted in no arguments after parsing. ` +
         `Ensure arguments are properly quoted if they contain spaces. E.g., "my audio file.wav" --model tiny`
     );
   }

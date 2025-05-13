@@ -1,5 +1,6 @@
 import { CONFIG } from "../config.js";
 import { _spawnPromise } from "./utils.js";
+import stringArgv from "string-argv";
 
 /**
  * Executes an FFmpeg command with the given arguments string.
@@ -20,31 +21,25 @@ export async function executeFFmpegCommand(
     throw new Error("FFmpeg arguments string cannot be empty.");
   }
 
-  // Basic parsing for arguments, handles quoted arguments.
-  const rawArgs =
-    ffmpegArgsString.match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g) || [];
-
-  // Remove surrounding quotes from parsed arguments, as spawn expects unquoted args.
-  // For example, an argument like "-vf \"filter_details\"" would be parsed by regex as "\"filter_details\"".
-  // This step changes it to "filter_details" before passing to spawn.
-  const parsedArgs = rawArgs.map((arg) => {
-    if (arg.length >= 2) {
-      // Ensure arg has at least 2 characters for start/end quote
-      const firstChar = arg[0];
-      const lastChar = arg[arg.length - 1];
-      if (
-        (firstChar === '"' && lastChar === '"') ||
-        (firstChar === "'" && lastChar === "'")
-      ) {
-        return arg.substring(1, arg.length - 1);
-      }
-    }
-    return arg;
-  });
+  // Use string-argv to parse the arguments string into an array,
+  // handling quotes and escapes robustly.
+  let parsedArgs: string[];
+  try {
+    parsedArgs = stringArgv(ffmpegArgsString);
+  } catch (e: unknown) {
+    // string-argv throws an error for unmatched quotes or other parsing issues
+    throw new Error(
+      `Could not parse ffmpeg_args: "${ffmpegArgsString}". ` +
+        `Error: ${
+          e instanceof Error ? e.message : String(e)
+        }. Ensure quotes are balanced and arguments are correctly formatted.`
+    );
+  }
 
   if (parsedArgs.length === 0 && ffmpegArgsString.trim() !== "") {
     throw new Error(
       `Could not parse ffmpeg_args: "${ffmpegArgsString}". ` +
+        `The arguments string was not empty but resulted in no arguments after parsing. ` +
         `Ensure arguments are properly quoted if they contain spaces and that the overall format is correct. E.g., -i "my video.mp4" -an out.mp3`
     );
   }
