@@ -63,6 +63,14 @@ export async function executeFFmpegCommand(
   // and we want to prevent calling ffmpeg without any actual operation, we could add a check here.
   // For now, we'll allow it, as ffmpeg handles it by showing help.
 
+  // Ensure -y is present for non-interactive overwrite, unless -n is specified.
+  const hasOverwriteFlag = finalArgs.some(
+    (arg) => arg === "-y" || arg === "-n"
+  );
+  if (!hasOverwriteFlag) {
+    finalArgs.unshift("-y"); // Prepend -y to force overwrite
+  }
+
   try {
     console.log(
       `Executing FFmpeg in CWD: ${downloadsDir} with command: ffmpeg ${finalArgs.join(

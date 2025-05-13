@@ -116,6 +116,15 @@ export function _spawnPromise(
         reject(new Error(`Failed with exit code: ${code}\n${output}`));
       }
     });
+
+    // Add error handling for spawn itself
+    process.on("error", (err) => {
+      reject(
+        new Error(
+          `Spawn error for command ${command}: ${err.message}\n${output}`
+        )
+      );
+    });
   });
 }
 
