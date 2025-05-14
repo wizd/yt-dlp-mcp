@@ -58,6 +58,13 @@ export async function executeFFmpegCommand(
   // and we want to prevent calling ffmpeg without any actual operation, we could add a check here.
   // For now, we'll allow it, as ffmpeg handles it by showing help.
 
+  // Ensure -loglevel error is present to minimize output, unless already specified.
+  const hasLogLevelFlag = finalArgs.some((arg) => arg === "-loglevel");
+  if (!hasLogLevelFlag) {
+    finalArgs.unshift("error"); // Add "error" value
+    finalArgs.unshift("-loglevel"); // Prepend -loglevel
+  }
+
   // Ensure -y is present for non-interactive overwrite, unless -n is specified.
   const hasOverwriteFlag = finalArgs.some(
     (arg) => arg === "-y" || arg === "-n"

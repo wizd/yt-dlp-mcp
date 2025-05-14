@@ -277,7 +277,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           required: ["text"],
         },
       },
-      {
+      /*{
         name: "add_subtitles_to_video",
         description:
           "使用 WhisperX 为下载目录中的视频文件生成 SRT 字幕，并使用 FFmpeg 将字幕嵌入视频中。输出带有字幕的新视频文件。",
@@ -302,7 +302,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           },
           required: ["input_filename"],
         },
-      },
+      },*/
       {
         name: "execute_whisperx_command",
         description:
