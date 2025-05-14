@@ -101,10 +101,14 @@ export async function downloadVideo(
     const randomFileBase = generateRandomFilename().replace(/\\.\\w+$/, ""); // 移除末尾的 .mp4 或其他可能的扩展名
 
     // 清理随机文件名基础部分
-    const sanitizedFileBase = sanitizeFilename(
-      randomFileBase,
+    const rawSanitizedFileBase = sanitizeFilename(
+      randomFileBase, // This should be extensionless due to .replace(/\.\w+$/, "") above
       effectiveConfig.file
     );
+
+    // 确保传递给 yt-dlp 的基础文件名不包含 .mp4 后缀, 因为 yt-dlp 会通过 .%(ext)s 添加正确的扩展名。
+    // 这是为了修正日志中观察到的 'filename.mp4.%(ext)s' 格式问题。
+    const sanitizedFileBase = rawSanitizedFileBase.replace(/\.mp4$/i, "");
 
     // outputTemplate 应包含 .%(ext)s 让 yt-dlp 自动处理扩展名
     outputTemplate = path.join(
@@ -113,6 +117,7 @@ export async function downloadVideo(
     );
 
     // expectedFilename 暂时用 .mp4 后缀。如果后续的目录查找成功，它会被覆盖。
+    // 更新：expectedFilename 初始也使用这个清理过的 base name，然后附加 .mp4 作为查找时的默认扩展名。
     expectedFilename = path.join(userDownloadsDir, sanitizedFileBase + ".mp4");
 
     // Download with progress info

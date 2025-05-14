@@ -27,6 +27,7 @@ import { embedSubtitles } from "./modules/subtitles.mjs";
 import { textToSpeech } from "./modules/speech/tts.mjs";
 import { executeWhisperxCommand } from "./modules/whisperx_tool.mjs";
 import { readFileContent, writeFileContent } from "./modules/file_io.mjs";
+import { executeFFprobeCommand } from "./modules/ffprobe_tool.js";
 
 const VERSION = "0.6.27";
 
@@ -319,6 +320,22 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         },
       },
       {
+        name: "execute_ffprobe_command",
+        description:
+          "执行用户提供的 ffprobe 命令参数字符串。命令将在默认的视频下载目录中执行。用户需要提供 ffprobe 命令本身之后的所有参数作为单个字符串。例如：'-v quiet -print_format json -show_format -show_streams video.mp4'。请确保输入文件名正确，如果不是绝对路径，则它们是相对于下载目录的。",
+        inputSchema: {
+          type: "object",
+          properties: {
+            ffprobe_args: {
+              type: "string",
+              description:
+                "要传递给 ffprobe 的完整参数字符串 (例如：'-v quiet -print_format json -show_format -show_streams video.mp4')",
+            },
+          },
+          required: ["ffprobe_args"],
+        },
+      },
+      {
         name: "read_file",
         description: "从默认下载目录读取指定文本文件的内容。",
         inputSchema: {
@@ -404,6 +421,7 @@ server.setRequestHandler(
       input_filename?: string;
       whisperx_args?: string;
       content?: string;
+      ffprobe_args?: string;
     };
 
     // if (toolName === "list_subtitle_languages") {
@@ -603,6 +621,19 @@ Access it via URL: ${CONFIG.file.hostingUrlBase}/${outputBaseName}`;
       return handleToolExecution(
         () => executeWhisperxCommand(args.whisperx_args as string),
         "Error executing WhisperX command"
+      );
+    } else if (toolName === "execute_ffprobe_command") {
+      if (typeof args.ffprobe_args !== "string") {
+        return {
+          content: [
+            { type: "text", text: "Error: ffprobe_args must be a string." },
+          ],
+          isError: true,
+        };
+      }
+      return handleToolExecution(
+        () => executeFFprobeCommand(args.ffprobe_args as string),
+        "Error executing ffprobe command"
       );
     } else if (toolName === "read_file") {
       if (typeof args.filename !== "string") {
