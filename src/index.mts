@@ -216,7 +216,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       {
         name: "execute_ffmpeg_command",
         description:
-          "执行用户提供的 FFmpeg 命令参数字符串。命令将在默认的视频下载目录中执行。用户需要提供 FFmpeg 命令本身之后的所有参数作为单个字符串。例如：'-i input.mp4 -vf scale=1280:720 output.mp4'。请确保输入/输出文件名正确，如果不是绝对路径，则它们是相对于下载目录的。由于 FFmpeg 功能强大且复杂，请谨慎构造命令参数。",
+          "执行用户提供的 FFmpeg 命令参数字符串。强烈建议优先使用主机支持的 GPU 加速（如 NVIDIA CUDA/NVENC），以大幅提升转码速度和效率。例如：'-i input.mp4 -c:v h264_nvenc -preset fast output.mp4'。命令将在默认的视频下载目录中执行。用户需要提供 FFmpeg 命令本身之后的所有参数作为单个字符串。例如：'-i input.mp4 -vf scale=1280:720 output.mp4'。请确保输入/输出文件名正确，如果不是绝对路径，则它们是相对于下载目录的。由于 FFmpeg 功能强大且复杂，请谨慎构造命令参数。如需 CPU 编码可用 '-c:v libx264'，但推荐优先尝试 GPU 加速。",
         inputSchema: {
           type: "object",
           properties: {
