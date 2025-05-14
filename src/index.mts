@@ -423,6 +423,7 @@ server.setRequestHandler(
     //   );
     // } else
     if (toolName === "download_video") {
+      console.log("download_video tool is called with args: ", args);
       return handleToolExecution(
         () =>
           downloadVideo(

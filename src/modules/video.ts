@@ -6,7 +6,6 @@ import { CONFIG as GlobalAppConfig, sanitizeFilename } from "../config.js";
 import {
   _spawnPromise,
   validateUrl,
-  getFormattedTimestamp,
   isYouTubeUrl,
   generateRandomFilename,
 } from "./utils.js";
@@ -59,12 +58,9 @@ export async function downloadVideo(
 
   let outputTemplate: string;
   let expectedFilename: string;
-  let filenameResolvedByYtdlp = true; // 标志位，true表示通过--get-filename成功获取
-  let fileBaseForRandomFallback = ""; // 用于存储随机文件名回退时的基础文件名
 
   try {
     validateUrl(url);
-    const timestamp = getFormattedTimestamp();
 
     let format: string;
     if (isYouTubeUrl(url)) {
@@ -100,52 +96,24 @@ export async function downloadVideo(
       }
     }
 
-    try {
-      // 嘗試獲取檔案名稱
-      outputTemplate = path.join(
-        userDownloadsDir,
-        sanitizeFilename(
-          `%(title)s [%(id)s] ${timestamp}`,
-          effectiveConfig.file
-        ) + ".%(ext)s"
-      );
+    // Always use a random filename
+    // 生成一个不带硬编码扩展名的随机文件名基础部分
+    const randomFileBase = generateRandomFilename().replace(/\\.\\w+$/, ""); // 移除末尾的 .mp4 或其他可能的扩展名
 
-      expectedFilename = await _spawnPromise("yt-dlp", [
-        "--get-filename",
-        "-f",
-        format,
-        "--output",
-        outputTemplate,
-        url,
-      ]);
-      expectedFilename = expectedFilename.trim();
-      // filenameResolvedByYtdlp 保持 true
-    } catch (error) {
-      filenameResolvedByYtdlp = false; // --get-filename 失败
-      // 如果無法獲取檔案名稱，使用隨機檔案名
-      // 生成一个不带硬编码扩展名的随机文件名基础部分
-      const randomFileBaseName = generateRandomFilename() // 调用时不传参数，使用默认的 'mp4'
-        .replace(/\.\w+$/, ""); // 移除末尾的 .mp4 或其他可能的扩展名
+    // 清理随机文件名基础部分
+    const sanitizedFileBase = sanitizeFilename(
+      randomFileBase,
+      effectiveConfig.file
+    );
 
-      // 清理并保存随机文件名基础部分，用于后续查找
-      fileBaseForRandomFallback = sanitizeFilename(
-        randomFileBaseName,
-        effectiveConfig.file
-      );
+    // outputTemplate 应包含 .%(ext)s 让 yt-dlp 自动处理扩展名
+    outputTemplate = path.join(
+      userDownloadsDir,
+      sanitizedFileBase + ".%(ext)s"
+    );
 
-      // outputTemplate 应包含 .%(ext)s 让 yt-dlp 自动处理扩展名
-      outputTemplate = path.join(
-        userDownloadsDir,
-        fileBaseForRandomFallback + ".%(ext)s"
-      );
-
-      // expectedFilename 暂时用 .mp4 后缀。如果后续的目录查找成功，它会被覆盖。
-      // 如果查找失败，日志和返回消息中的扩展名可能不准，但文件本身扩展名是正确的。
-      expectedFilename = path.join(
-        userDownloadsDir,
-        fileBaseForRandomFallback + ".mp4"
-      );
-    }
+    // expectedFilename 暂时用 .mp4 后缀。如果后续的目录查找成功，它会被覆盖。
+    expectedFilename = path.join(userDownloadsDir, sanitizedFileBase + ".mp4");
 
     // Download with progress info
     try {
@@ -173,34 +141,30 @@ export async function downloadVideo(
       console.log("yt-dlp args:", args);
       await _spawnPromise("yt-dlp", args); // 实际下载
 
-      // 如果是通过随机文件名回退路径下载的，尝试修正 expectedFilename 的扩展名
-      if (!filenameResolvedByYtdlp) {
-        try {
-          const filesInDir = fs.readdirSync(userDownloadsDir);
-          // fileBaseForRandomFallback 是不带路径和扩展名的纯文件名基础
-          const actualDownloadedFile = filesInDir.find((f) =>
-            f.startsWith(fileBaseForRandomFallback)
-          );
+      // 尝试修正 expectedFilename 的扩展名
+      // 此逻辑之前依赖 filenameResolvedByYtdlp, 现在总是执行
+      try {
+        const filesInDir = fs.readdirSync(userDownloadsDir);
+        // sanitizedFileBase 是不带路径和扩展名的纯文件名基础
+        const actualDownloadedFile = filesInDir.find((f) =>
+          f.startsWith(sanitizedFileBase)
+        );
 
-          if (actualDownloadedFile) {
-            // 如果找到了匹配的文件，更新 expectedFilename 为包含实际扩展名的完整路径
-            expectedFilename = path.join(
-              userDownloadsDir,
-              actualDownloadedFile
-            );
-          } else {
-            // 未找到匹配文件，这不应该发生如果下载成功。日志警告，expectedFilename 保持原样（带.mp4后缀）
-            console.warn(
-              `[WARN] Post-download: Could not find file starting with "${fileBaseForRandomFallback}" in "${userDownloadsDir}". ` +
-                `The success message might use a default .mp4 extension for ${fileBaseForRandomFallback}.`
-            );
-          }
-        } catch (readdirError) {
-          // 读取目录失败，日志警告，expectedFilename 保持原样
+        if (actualDownloadedFile) {
+          // 如果找到了匹配的文件，更新 expectedFilename 为包含实际扩展名的完整路径
+          expectedFilename = path.join(userDownloadsDir, actualDownloadedFile);
+        } else {
+          // 未找到匹配文件，这不应该发生如果下载成功。日志警告，expectedFilename 保持原样（带.mp4后缀）
           console.warn(
-            `[WARN] Post-download: Error reading directory "${userDownloadsDir}" to find actual filename for base "${fileBaseForRandomFallback}". Error: ${readdirError}`
+            `[WARN] Post-download: Could not find file starting with "${sanitizedFileBase}" in "${userDownloadsDir}". ` +
+              `The success message might use a default .mp4 extension for ${sanitizedFileBase}.`
           );
         }
+      } catch (readdirError) {
+        // 读取目录失败，日志警告，expectedFilename 保持原样
+        console.warn(
+          `[WARN] Post-download: Error reading directory "${userDownloadsDir}" to find actual filename for base "${sanitizedFileBase}". Error: ${readdirError}`
+        );
       }
     } catch (error) {
       throw new Error(
