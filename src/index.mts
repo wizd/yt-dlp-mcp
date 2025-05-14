@@ -244,7 +244,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             language: {
               type: "string",
               description:
-                "(可选) 音频的 BCP-47 语言代码 (例如：'en', 'zh', 'ja')。如果省略，WhisperX 会尝试自动检测语言。",
+                "(可选) 音频的 BCP-47 语言代码 (例如：'en', 'zh', 'ja')。如果省略，WhisperX 会尝试自动检测语言。除非确信，否则不要对未知音源指定语言代码。",
             },
           },
           required: ["filename"],
