@@ -3,6 +3,7 @@
 import express from "express";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import {
   CallToolRequestSchema,
@@ -681,8 +682,11 @@ Access it via URL: ${CONFIG.file.hostingUrlBase}/${outputBaseName}`;
 );
 
 async function initStreamingHttp(app: express.Application, server: McpServer) {
-  // Map to store transports by session ID
-  const transports: { [sessionId: string]: StreamableHTTPServerTransport } = {};
+  // Store transports for each session type
+  const transports = {
+    streamable: {} as Record<string, StreamableHTTPServerTransport>,
+    sse: {} as Record<string, SSEServerTransport>,
+  };
 
   // Handle POST requests for client-to-server communication
   app.post("/mcp", async (req, res) => {
@@ -690,23 +694,23 @@ async function initStreamingHttp(app: express.Application, server: McpServer) {
     const sessionId = req.headers["mcp-session-id"] as string | undefined;
     let transport: StreamableHTTPServerTransport;
 
-    if (sessionId && transports[sessionId]) {
+    if (sessionId && transports.streamable[sessionId]) {
       // Reuse existing transport
-      transport = transports[sessionId];
+      transport = transports.streamable[sessionId];
     } else if (!sessionId && isInitializeRequest(req.body)) {
       // New initialization request
       transport = new StreamableHTTPServerTransport({
         sessionIdGenerator: () => randomUUID(),
         onsessioninitialized: (sessionId) => {
           // Store the transport by session ID
-          transports[sessionId] = transport;
+          transports.streamable[sessionId] = transport;
         },
       });
 
       // Clean up transport when closed
       transport.onclose = () => {
         if (transport.sessionId) {
-          delete transports[transport.sessionId];
+          delete transports.streamable[transport.sessionId];
         }
       };
 
@@ -737,12 +741,12 @@ async function initStreamingHttp(app: express.Application, server: McpServer) {
     res: express.Response
   ) => {
     const sessionId = req.headers["mcp-session-id"] as string | undefined;
-    if (!sessionId || !transports[sessionId]) {
+    if (!sessionId || !transports.streamable[sessionId]) {
       res.status(400).send("Invalid or missing session ID");
       return;
     }
 
-    const transport = transports[sessionId];
+    const transport = transports.streamable[sessionId];
     await transport.handleRequest(req, res);
   };
 
@@ -751,6 +755,30 @@ async function initStreamingHttp(app: express.Application, server: McpServer) {
 
   // Handle DELETE requests for session termination
   app.delete("/mcp", handleSessionRequest);
+
+  // Legacy SSE endpoint for older clients
+  app.get("/sse", async (_, res) => {
+    // Create SSE transport for legacy clients
+    const transport = new SSEServerTransport("/messages", res);
+    transports.sse[transport.sessionId] = transport;
+
+    res.on("close", () => {
+      delete transports.sse[transport.sessionId];
+    });
+
+    await server.connect(transport);
+  });
+
+  // Legacy message endpoint for older clients
+  app.post("/messages", async (req, res) => {
+    const sessionId = req.query.sessionId as string;
+    const transport = transports.sse[sessionId];
+    if (transport) {
+      await transport.handlePostMessage(req, res, req.body);
+    } else {
+      res.status(400).send("No transport found for sessionId");
+    }
+  });
 }
 
 // 启动 MCP 服务器，支持 stdio 和 rest 两种模式
