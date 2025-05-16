@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import express from "express";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
@@ -29,6 +30,8 @@ import { executeWhisperxCommand } from "./modules/whisperx_tool.mjs";
 import { readFileContent, writeFileContent } from "./modules/file_io.mjs";
 import { executeFFprobeCommand } from "./modules/ffprobe_tool.js";
 import { createServer } from "http";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { randomUUID } from "crypto";
 
 const VERSION = "0.6.27";
 
@@ -110,7 +113,7 @@ async function initialize(): Promise<void> {
   }
 }
 
-const server = new Server(
+const server = new McpServer(
   {
     name: "yt-dlp-mcp",
     version: VERSION,
@@ -128,7 +131,7 @@ const server = new Server(
 /**
  * Returns the list of available tools.
  */
-server.setRequestHandler(ListToolsRequestSchema, async () => {
+server.server.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
     tools: [
       /*      {
@@ -404,7 +407,7 @@ async function handleToolExecution<T>(
 /**
  * Handles tool execution requests.
  */
-server.setRequestHandler(
+server.server.setRequestHandler(
   CallToolRequestSchema,
   async (request: CallToolRequest) => {
     const toolName = request.params.name;
@@ -677,6 +680,79 @@ Access it via URL: ${CONFIG.file.hostingUrlBase}/${outputBaseName}`;
   }
 );
 
+async function initStreamingHttp(app: express.Application, server: McpServer) {
+  // Map to store transports by session ID
+  const transports: { [sessionId: string]: StreamableHTTPServerTransport } = {};
+
+  // Handle POST requests for client-to-server communication
+  app.post("/mcp", async (req, res) => {
+    // Check for existing session ID
+    const sessionId = req.headers["mcp-session-id"] as string | undefined;
+    let transport: StreamableHTTPServerTransport;
+
+    if (sessionId && transports[sessionId]) {
+      // Reuse existing transport
+      transport = transports[sessionId];
+    } else if (!sessionId && isInitializeRequest(req.body)) {
+      // New initialization request
+      transport = new StreamableHTTPServerTransport({
+        sessionIdGenerator: () => randomUUID(),
+        onsessioninitialized: (sessionId) => {
+          // Store the transport by session ID
+          transports[sessionId] = transport;
+        },
+      });
+
+      // Clean up transport when closed
+      transport.onclose = () => {
+        if (transport.sessionId) {
+          delete transports[transport.sessionId];
+        }
+      };
+
+      // ... set up server resources, tools, and prompts ...
+
+      // Connect to the MCP server
+      await server.connect(transport);
+    } else {
+      // Invalid request
+      res.status(400).json({
+        jsonrpc: "2.0",
+        error: {
+          code: -32000,
+          message: "Bad Request: No valid session ID provided",
+        },
+        id: null,
+      });
+      return;
+    }
+
+    // Handle the request
+    await transport.handleRequest(req, res, req.body);
+  });
+
+  // Reusable handler for GET and DELETE requests
+  const handleSessionRequest = async (
+    req: express.Request,
+    res: express.Response
+  ) => {
+    const sessionId = req.headers["mcp-session-id"] as string | undefined;
+    if (!sessionId || !transports[sessionId]) {
+      res.status(400).send("Invalid or missing session ID");
+      return;
+    }
+
+    const transport = transports[sessionId];
+    await transport.handleRequest(req, res);
+  };
+
+  // Handle GET requests for server-to-client notifications via SSE
+  app.get("/mcp", handleSessionRequest);
+
+  // Handle DELETE requests for session termination
+  app.delete("/mcp", handleSessionRequest);
+}
+
 // 启动 MCP 服务器，支持 stdio 和 rest 两种模式
 async function runServer() {
   await initialize();
@@ -737,7 +813,11 @@ async function runServer() {
 
     // 1. 创建 Express 应用实例
     const app = express();
+    app.use(express.json());
+
     const httpServer = createServer(app);
+
+    initStreamingHttp(app, server);
 
     const wsTransport = new BlaxelMcpServerTransport(httpServer);
     try {

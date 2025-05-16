@@ -12,11 +12,11 @@ dependencies:
     specifier: ^3.806.0
     version: 3.806.0
   '@modelcontextprotocol/sdk':
-    specifier: 0.7.0
-    version: 0.7.0
+    specifier: 1.11.3
+    version: 1.11.3
   '@wizdy/blaxel_core':
-    specifier: ^0.2.1-dev4-1
-    version: 0.2.1-dev4-1(@hey-api/openapi-ts@0.67.3)
+    specifier: 0.2.1-dev4-2
+    version: 0.2.1-dev4-2(@hey-api/openapi-ts@0.67.3)
   '@wizdy/typescript-sdk':
     specifier: ^1.1.2
     version: 1.1.2
@@ -1335,16 +1335,8 @@ packages:
     resolution: {integrity: sha512-4JQNk+3mVzK3xh2rqd6RB4J46qUR19azEHBneZyTZM+c456qOrbbM/5xcR8huNCCcbVt7+UmizG6GuUvPvKUYg==}
     dev: false
 
-  /@modelcontextprotocol/sdk@0.7.0:
-    resolution: {integrity: sha512-YlnQf8//eDHClUM607vb/6+GHmCdMnIfOkN2pcpexN4go9sYHm2JfNnqc5ILS7M8enUlwe9dQO9886l3NO3rUw==}
-    dependencies:
-      content-type: 1.0.5
-      raw-body: 3.0.0
-      zod: 3.24.4
-    dev: false
-
-  /@modelcontextprotocol/sdk@1.11.1:
-    resolution: {integrity: sha512-9LfmxKTb1v+vUS1/emSk1f5ePmTLkb9Le9AxOB5T0XM59EUumwcS45z05h7aiZx3GI0Bl7mjb3FMEglYj+acuQ==}
+  /@modelcontextprotocol/sdk@1.11.3:
+    resolution: {integrity: sha512-rmOWVRUbUJD7iSvJugjUbFZshTAuJ48MXoZ80Osx1GM0K/H1w7rSEvmw8m6vdWxNASgtaHIhAgre4H/E9GJiYQ==}
     engines: {node: '>=18'}
     dependencies:
       content-type: 1.0.5
@@ -2053,12 +2045,12 @@ packages:
       '@types/yargs-parser': 21.0.3
     dev: true
 
-  /@wizdy/blaxel_core@0.2.1-dev4-1(@hey-api/openapi-ts@0.67.3):
-    resolution: {integrity: sha512-PROvkk7UY+B8cImQxFBnq+tdCS285sq7TkuWKHXKfMjjET3kz4WzHrRq+pNbnBjfHetFy3UIwkOmhlk+IEKe8g==}
+  /@wizdy/blaxel_core@0.2.1-dev4-2(@hey-api/openapi-ts@0.67.3):
+    resolution: {integrity: sha512-rgWLHnzkJZzknpR1j16QmM+XfAJbs7rJ9CBeGz/zcfc3lihOGttonXHlHYcmykGsLjZdq6LfuZw7xPyfqwhV8w==}
     engines: {node: '>=18'}
     dependencies:
       '@hey-api/client-fetch': 0.10.0(@hey-api/openapi-ts@0.67.3)
-      '@modelcontextprotocol/sdk': 1.11.1
+      '@modelcontextprotocol/sdk': 1.11.3
       crypto: 1.0.1
       dotenv: 16.5.0
       jwt-decode: 4.0.0
@@ -2077,7 +2069,7 @@ packages:
   /@wizdy/typescript-sdk@1.1.2:
     resolution: {integrity: sha512-RQV+qzTqyZpcMrdd+iHahGnCEn3C3BUNIQNt/wf/oQ/Ei46FNYMO7B05gOKSCByERq5Oul5hoTdnUFkSafFfHg==}
     dependencies:
-      '@modelcontextprotocol/sdk': 1.11.1
+      '@modelcontextprotocol/sdk': 1.11.3
       content-type: 1.0.5
       express: 5.1.0
       raw-body: 3.0.0

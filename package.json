@@ -41,8 +41,8 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.806.0",
     "@aws-sdk/s3-request-presigner": "^3.806.0",
-    "@modelcontextprotocol/sdk": "0.7.0",
-    "@wizdy/blaxel_core": "^0.2.1-dev4-1",
+    "@modelcontextprotocol/sdk": "1.11.3",
+    "@wizdy/blaxel_core": "0.2.1-dev4-2",
     "@wizdy/typescript-sdk": "^1.1.2",
     "cors": "^2.8.5",
     "dotenv": "^16.5.0",
