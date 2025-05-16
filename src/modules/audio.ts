@@ -2,12 +2,8 @@ import { readdirSync } from "fs";
 import * as path from "path";
 import type { Config } from "../config.js";
 import { sanitizeFilename } from "../config.js";
-import {
-  _spawnPromise,
-  validateUrl,
-  isYouTubeUrl,
-  generateRandomFilename,
-} from "./utils.js";
+import { _spawnPromise, validateUrl, generateRandomFilename } from "./utils.js";
+import { getCookieFilePath } from "./cookieManager.js";
 
 /**
  * Downloads audio from a video URL in the best available quality.
@@ -48,9 +44,7 @@ export async function downloadAudio(
       sanitizedFileBase + ".%(ext)s"
     );
 
-    const format = isYouTubeUrl(url)
-      ? "140/bestaudio[ext=m4a]/bestaudio"
-      : "bestaudio[ext=m4a]/bestaudio[ext=mp3]/bestaudio";
+    const format = "bestaudio[ext=m4a]/bestaudio[ext=mp3]/bestaudio";
 
     const args = [
       "--verbose",
@@ -63,11 +57,8 @@ export async function downloadAudio(
       outputTemplate,
     ];
 
-    if (isYouTubeUrl(url)) {
-      const cookiePath = path.resolve(
-        new URL(import.meta.url).pathname,
-        "../yt-cookies.txt"
-      );
+    const cookiePath = getCookieFilePath(url);
+    if (cookiePath) {
       args.push("--cookies", cookiePath);
     }
 

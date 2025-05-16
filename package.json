@@ -26,7 +26,7 @@
   ],
   "main": "./lib/index.mjs",
   "scripts": {
-    "build": "tsc && shx chmod +x ./lib/index.mjs",
+    "build": "tsc && shx mkdir -p lib/modules && shx cp -u src/modules/*.txt lib/ && shx chmod +x ./lib/index.mjs",
     "start": "node lib/index.mjs",
     "test": "PYTHONPATH= PYTHONHOME= node --experimental-vm-modules node_modules/jest/bin/jest.js --detectOpenHandles --forceExit"
   },

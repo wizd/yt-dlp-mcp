@@ -9,6 +9,18 @@ import {
   isYouTubeUrl,
   generateRandomFilename,
 } from "./utils.js";
+import { getCookieFilePath } from "./cookieManager.js"; // Import the new cookie manager
+
+/**
+ * 定义下载结果的接口
+ */
+export interface DownloadResult {
+  success: boolean;
+  message: string;
+  videoFilename?: string;
+  metaFilename?: string;
+  downloadUrl?: string;
+}
 
 /**
  * Downloads a video from the specified URL.
@@ -16,8 +28,8 @@ import {
  * @param url - The URL of the video to download
  * @param configParam - Optional configuration object for download settings. If not provided, global config is used.
  * @param resolution - Preferred video resolution ('480p', '720p', '1080p', 'best')
- * @returns Promise resolving to a success message with the downloaded file path
- * @throws {Error} When URL is invalid or download fails
+ * @returns Promise resolving to a DownloadResult object
+ * @throws {Error} Rethrows errors from underlying operations, but the function itself aims to return a DownloadResult.
  *
  * @example
  * ```typescript
@@ -34,7 +46,7 @@ import {
  * console.log(hdResult);
  *
  * // Download with a custom config object
- * import { loadConfig } from "./config";
+ * import { loadConfig } from "./config"; // Assuming loadConfig is in a config file at the same level
  * const customConfig = loadConfig(); // or your custom config object
  * const customResult = await downloadVideo(
  *  'https://youtube.com/watch?v=...',
@@ -57,7 +69,7 @@ export async function downloadVideo(
   const userDownloadsDir = effectiveConfig.file.downloadsDir;
 
   let outputTemplate: string;
-  let expectedFilename: string;
+  let baseVideoFilename: string; // This will hold just the filename.ext part
 
   try {
     validateUrl(url);
@@ -96,103 +108,98 @@ export async function downloadVideo(
       }
     }
 
-    // Always use a random filename
-    // 生成一个不带硬编码扩展名的随机文件名基础部分
-    const randomFileBase = generateRandomFilename().replace(/\\.\\w+$/, ""); // 移除末尾的 .mp4 或其他可能的扩展名
-
-    // 清理随机文件名基础部分
+    const randomFileBase = generateRandomFilename().replace(/\\.\\w+$/, "");
     const rawSanitizedFileBase = sanitizeFilename(
-      randomFileBase, // This should be extensionless due to .replace(/\.\w+$/, "") above
+      randomFileBase,
       effectiveConfig.file
     );
-
-    // 确保传递给 yt-dlp 的基础文件名不包含 .mp4 后缀, 因为 yt-dlp 会通过 .%(ext)s 添加正确的扩展名。
-    // 这是为了修正日志中观察到的 'filename.mp4.%(ext)s' 格式问题。
     const sanitizedFileBase = rawSanitizedFileBase.replace(/\.mp4$/i, "");
 
-    // outputTemplate 应包含 .%(ext)s 让 yt-dlp 自动处理扩展名
     outputTemplate = path.join(
       userDownloadsDir,
       sanitizedFileBase + ".%(ext)s"
     );
 
-    // expectedFilename 暂时用 .mp4 后缀。如果后续的目录查找成功，它会被覆盖。
-    // 更新：expectedFilename 初始也使用这个清理过的 base name，然后附加 .mp4 作为查找时的默认扩展名。
-    expectedFilename = path.join(userDownloadsDir, sanitizedFileBase + ".mp4");
+    const args = [
+      "--write-info-json",
+      "--progress",
+      "--newline",
+      "--no-mtime",
+      "-f",
+      format,
+      "--output",
+      outputTemplate,
+    ];
 
-    // Download with progress info
-    try {
-      const args = [
-        "--progress",
-        "--newline",
-        "--no-mtime",
-        "-f",
-        format,
-        "--output",
-        outputTemplate,
-      ];
-
-      // 如果是YouTube视频，添加cookies以通过bot验证
-      if (isYouTubeUrl(url)) {
-        const cookiePath = path.resolve(
-          new URL(import.meta.url).pathname,
-          "../yt-cookies.txt"
-        );
-        args.push("--cookies", cookiePath);
-      }
-
-      args.push(url);
-
-      console.log("yt-dlp args:", args);
-      await _spawnPromise("yt-dlp", args); // 实际下载
-
-      // 尝试修正 expectedFilename 的扩展名
-      // 此逻辑之前依赖 filenameResolvedByYtdlp, 现在总是执行
-      try {
-        const filesInDir = fs.readdirSync(userDownloadsDir);
-        // sanitizedFileBase 是不带路径和扩展名的纯文件名基础
-        const actualDownloadedFile = filesInDir.find((f) =>
-          f.startsWith(sanitizedFileBase)
-        );
-
-        if (actualDownloadedFile) {
-          // 如果找到了匹配的文件，更新 expectedFilename 为包含实际扩展名的完整路径
-          expectedFilename = path.join(userDownloadsDir, actualDownloadedFile);
-        } else {
-          // 未找到匹配文件，这不应该发生如果下载成功。日志警告，expectedFilename 保持原样（带.mp4后缀）
-          console.warn(
-            `[WARN] Post-download: Could not find file starting with "${sanitizedFileBase}" in "${userDownloadsDir}". ` +
-              `The success message might use a default .mp4 extension for ${sanitizedFileBase}.`
-          );
-        }
-      } catch (readdirError) {
-        // 读取目录失败，日志警告，expectedFilename 保持原样
-        console.warn(
-          `[WARN] Post-download: Error reading directory "${userDownloadsDir}" to find actual filename for base "${sanitizedFileBase}". Error: ${readdirError}`
-        );
-      }
-    } catch (error) {
-      throw new Error(
-        `Download failed: ${
-          error instanceof Error ? error.message : String(error)
-        }`
-      );
+    const cookiePath = getCookieFilePath(url);
+    if (cookiePath) {
+      args.push("--cookies", cookiePath);
     }
 
+    args.push(url);
+
+    console.log("yt-dlp args:", args);
+    await _spawnPromise("yt-dlp", args);
+
+    // Discover the actual downloaded filename (with correct extension)
+    try {
+      const filesInDir = fs.readdirSync(userDownloadsDir);
+      const actualDownloadedFile = filesInDir.find(
+        (f) => f.startsWith(sanitizedFileBase) && !f.endsWith(".json") // Exclude .info.json
+      );
+
+      if (actualDownloadedFile) {
+        baseVideoFilename = actualDownloadedFile; // Store just the filename.ext
+      } else {
+        console.warn(
+          `[WARN] Post-download: Could not find video file starting with "${sanitizedFileBase}" in "${userDownloadsDir}". Using fallback with .mp4.`
+        );
+        // If not found, baseVideoFilename will use the sanitized base + .mp4
+        baseVideoFilename = sanitizedFileBase + ".mp4";
+        // expectedFilename remains as initially set (userDownloadsDir + sanitizedFileBase + ".mp4")
+      }
+    } catch (readdirError) {
+      console.warn(
+        `[WARN] Post-download: Error reading directory "${userDownloadsDir}" to find actual filename for base "${sanitizedFileBase}". Error: ${readdirError}`
+      );
+      // Fallback if readdir fails
+      baseVideoFilename = sanitizedFileBase + ".mp4";
+      // expectedFilename remains as initially set
+    }
+
+    const metaFilename =
+      baseVideoFilename.substring(0, baseVideoFilename.lastIndexOf(".")) +
+      ".info.json";
+    const downloadUrl = `${effectiveConfig.file.hostingUrlBase}/${baseVideoFilename}`;
+
     console.log(
-      `all done, expectedFilename: ${
-        effectiveConfig.file.hostingUrlBase
-      }/${path.basename(expectedFilename)}`
+      `Download successful. Video: ${baseVideoFilename}, Meta: ${metaFilename}, URL: ${downloadUrl}`
     );
 
-    // 使用 effectiveConfig 来获取 hostingUrlBase
-    return `Video successfully downloaded to working dir as: ${path.basename(
-      expectedFilename
-    )}
-    You can access it via url: ${
-      effectiveConfig.file.hostingUrlBase
-    }/${path.basename(expectedFilename)}`;
+    return JSON.stringify({
+      success: true,
+      message: `Video successfully downloaded as ${baseVideoFilename}.`,
+      videoFilename: baseVideoFilename,
+      metaFilename: metaFilename,
+      downloadUrl: downloadUrl,
+    });
   } catch (error) {
-    throw error;
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error(`Download failed: ${errorMessage}`);
+    // Check if it's a specific download error or a URL validation error etc.
+    if (
+      error instanceof Error &&
+      error.message.startsWith("Download failed:")
+    ) {
+      return JSON.stringify({
+        success: false,
+        message: errorMessage, // Already includes "Download failed: " prefix
+      });
+    }
+    // For other errors (e.g., URL validation, setup issues)
+    return JSON.stringify({
+      success: false,
+      message: `Operation failed: ${errorMessage}`,
+    });
   }
 } 

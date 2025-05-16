@@ -33,6 +33,8 @@ import { executeFFprobeCommand } from "./modules/ffprobe_tool.js";
 import { createServer } from "http";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { randomUUID } from "crypto";
+import { listSubtitles } from "./modules/subtitle.js";
+import { downloadSubtitles } from "./modules/subtitle.js";
 
 const VERSION = "0.6.27";
 
@@ -429,23 +431,22 @@ server.server.setRequestHandler(
       ffprobe_args?: string;
     };
 
-    // if (toolName === "list_subtitle_languages") {
-    //   return handleToolExecution(
-    //     () => listSubtitles(args.url),
-    //     "Error listing subtitle languages"
-    //   );
-    // } else if (toolName === "download_video_subtitles") {
-    //   return handleToolExecution(
-    //     () =>
-    //       downloadSubtitles(
-    //         args.url,
-    //         args.language || CONFIG.download.defaultSubtitleLanguage,
-    //         CONFIG
-    //       ),
-    //     "Error downloading subtitles"
-    //   );
-    // } else
-    if (toolName === "download_video") {
+    if (toolName === "list_subtitle_languages") {
+      return handleToolExecution(
+        () => listSubtitles(args.url as string),
+        "Error listing subtitle languages"
+      );
+    } else if (toolName === "download_video_subtitles") {
+      return handleToolExecution(
+        () =>
+          downloadSubtitles(
+            args.url as string,
+            args.language || CONFIG.download.defaultSubtitleLanguage,
+            CONFIG
+          ),
+        "Error downloading subtitles"
+      );
+    } else if (toolName === "download_video") {
       console.log("download_video tool is called with args: ", args);
       return handleToolExecution(
         () =>

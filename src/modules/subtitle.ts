@@ -2,7 +2,8 @@ import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
 import type { Config } from '../config.js';
-import { _spawnPromise, validateUrl, isYouTubeUrl } from "./utils.js";
+import { _spawnPromise, validateUrl } from "./utils.js";
+import { getCookieFilePath } from "./cookieManager.js";
 
 /**
  * Lists all available subtitles for a video.
@@ -34,12 +35,8 @@ export async function listSubtitles(url: string): Promise<string> {
       "--verbose",
     ];
 
-    // 如果是YouTube视频，添加cookies以通过bot验证
-    if (isYouTubeUrl(url)) {
-      const cookiePath = path.resolve(
-        new URL(import.meta.url).pathname,
-        "../yt-cookies.txt"
-      );
+    const cookiePath = getCookieFilePath(url);
+    if (cookiePath) {
       args.push("--cookies", cookiePath);
     }
 
@@ -54,20 +51,20 @@ export async function listSubtitles(url: string): Promise<string> {
 
 /**
  * Downloads subtitles for a video in the specified language.
- * 
+ *
  * @param url - The URL of the video
  * @param language - Language code (e.g., 'en', 'zh-Hant', 'ja')
  * @param config - Configuration object
  * @returns Promise resolving to the subtitle content
  * @throws {Error} When URL is invalid, language is not available, or download fails
- * 
+ *
  * @example
  * ```typescript
  * try {
  *   // Download English subtitles
  *   const enSubs = await downloadSubtitles('https://youtube.com/watch?v=...', 'en', config);
  *   console.log('English subtitles:', enSubs);
- * 
+ *
  *   // Download Traditional Chinese subtitles
  *   const zhSubs = await downloadSubtitles('https://youtube.com/watch?v=...', 'zh-Hant', config);
  *   console.log('Chinese subtitles:', zhSubs);
@@ -86,10 +83,12 @@ export async function downloadSubtitles(
   config: Config
 ): Promise<string> {
   if (!validateUrl(url)) {
-    throw new Error('Invalid or unsupported URL format');
+    throw new Error("Invalid or unsupported URL format");
   }
 
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), config.file.tempDirPrefix));
+  const tempDir = fs.mkdtempSync(
+    path.join(os.tmpdir(), config.file.tempDirPrefix)
+  );
 
   try {
     const args = [
@@ -102,12 +101,8 @@ export async function downloadSubtitles(
       path.join(tempDir, "%(title)s.%(ext)s"),
     ];
 
-    // 如果是YouTube视频，添加cookies以通过bot验证
-    if (isYouTubeUrl(url)) {
-      const cookiePath = path.resolve(
-        new URL(import.meta.url).pathname,
-        "../yt-cookies.txt"
-      );
+    const cookiePath = getCookieFilePath(url);
+    if (cookiePath) {
       args.push("--cookies", cookiePath);
     }
 
@@ -115,16 +110,17 @@ export async function downloadSubtitles(
 
     await _spawnPromise("yt-dlp", args);
 
-    const subtitleFiles = fs.readdirSync(tempDir)
-      .filter(file => file.endsWith('.vtt'));
+    const subtitleFiles = fs
+      .readdirSync(tempDir)
+      .filter((file) => file.endsWith(".vtt"));
 
     if (subtitleFiles.length === 0) {
-      throw new Error('No subtitle files found');
+      throw new Error(`No subtitle files found for language '${language}'.`);
     }
 
-    let output = '';
+    let output = "";
     for (const file of subtitleFiles) {
-      output += fs.readFileSync(path.join(tempDir, file), 'utf8');
+      output += fs.readFileSync(path.join(tempDir, file), "utf8");
     }
 
     return output;
