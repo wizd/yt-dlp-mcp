@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
+import express from "express";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import type { CallToolRequest } from "@modelcontextprotocol/sdk/types.js";
-
 import * as os from "os";
 import * as fs from "fs";
 import * as path from "path";
@@ -20,7 +20,7 @@ import { RestServerTransport } from "@wizdy/typescript-sdk/server/rest.js";
 import { getParamValue } from "@wizdy/typescript-sdk/utils/index.js";
 import { Request, Response } from "express";
 import { HostVideoToR2 } from "./modules/R2/VideoPipeline.js";
-import { BlaxelMcpServerTransport } from "@blaxel/core";
+import { BlaxelMcpServerTransport } from "@wizdy/blaxel_core";
 import { speechToText } from "./modules/speech/stt.mjs";
 import { generateSrtSubtitles } from "./modules/speech/stt.mjs";
 import { embedSubtitles } from "./modules/subtitles.mjs";
@@ -28,6 +28,7 @@ import { textToSpeech } from "./modules/speech/tts.mjs";
 import { executeWhisperxCommand } from "./modules/whisperx_tool.mjs";
 import { readFileContent, writeFileContent } from "./modules/file_io.mjs";
 import { executeFFprobeCommand } from "./modules/ffprobe_tool.js";
+import { createServer } from "http";
 
 const VERSION = "0.6.27";
 
@@ -734,7 +735,11 @@ async function runServer() {
       }`
     );
 
-    const wsTransport = new BlaxelMcpServerTransport();
+    // 1. 创建 Express 应用实例
+    const app = express();
+    const httpServer = createServer(app);
+
+    const wsTransport = new BlaxelMcpServerTransport(httpServer);
     try {
       await server.connect(wsTransport); // MCP Server 连接 transport
       console.info("Server started");
@@ -743,6 +748,16 @@ async function runServer() {
       console.error(`启动 WebSocket 服务失败: ${err.message}`, err);
       process.exit(1);
     }
+
+    // 6. 启动 HTTP 服务器 (而不是 Express 的 app.listen())
+    // 因为 WebSocketServer 依赖于这个 http.Server 实例。
+    httpServer.listen(port, () => {
+      console.log(
+        `Express server with WebSocket support is listening on port ${port}`
+      );
+      console.log(`HTTP endpoints accessible at http://localhost:${port}`);
+      console.log(`WebSocket endpoint accessible at ws://localhost:${port}`); // 通常 WebSocket 会在同一路径，除非特殊配置
+    });
   } else {
     // 兼容原有 stdio 启动
     const transport = new StdioServerTransport();

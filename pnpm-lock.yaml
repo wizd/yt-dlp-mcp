@@ -11,12 +11,12 @@ dependencies:
   '@aws-sdk/s3-request-presigner':
     specifier: ^3.806.0
     version: 3.806.0
-  '@blaxel/core':
-    specifier: ^0.2.2
-    version: 0.2.2(@hey-api/openapi-ts@0.67.3)
   '@modelcontextprotocol/sdk':
     specifier: 0.7.0
     version: 0.7.0
+  '@wizdy/blaxel_core':
+    specifier: ^0.2.1-dev4-1
+    version: 0.2.1-dev4-1(@hey-api/openapi-ts@0.67.3)
   '@wizdy/typescript-sdk':
     specifier: ^1.1.2
     version: 1.1.2
@@ -1010,28 +1010,6 @@ packages:
   /@bcoe/v8-coverage@0.2.3:
     resolution: {integrity: sha512-0hYQ8SB4Db5zvZB4axdMHGwEaQjkZzFjQiN9LVYvIFB2nSUHW9tYpxWriPrWDASIxiaXax83REcLxuSdnGPZtw==}
     dev: true
-
-  /@blaxel/core@0.2.2(@hey-api/openapi-ts@0.67.3):
-    resolution: {integrity: sha512-wnMaCY5Tcs8v6GrSapGeAAYpy6b9od6no6bFGy6Tn2ZzGjR2U2GNAsFuUIJSRv0Els8eIyK8fwzNIiWyvqTmgw==}
-    engines: {node: '>=18'}
-    dependencies:
-      '@hey-api/client-fetch': 0.10.0(@hey-api/openapi-ts@0.67.3)
-      '@modelcontextprotocol/sdk': 1.11.1
-      crypto: 1.0.1
-      dotenv: 16.5.0
-      jwt-decode: 4.0.0
-      toml: 3.0.0
-      uuid: 11.1.0
-      ws: 8.18.2
-      yaml: 2.7.1
-      yargs: 17.7.2
-      zod: 3.24.4
-    transitivePeerDependencies:
-      - '@hey-api/openapi-ts'
-      - bufferutil
-      - supports-color
-      - utf-8-validate
-    dev: false
 
   /@cspotcode/source-map-support@0.8.1:
     resolution: {integrity: sha512-IchNf6dN4tHoMFIn/7OE8LWZ19Y6q/67Bmf6vnGREv8RSbBVb9LPJxEcnwrcwX6ixSvaiGoomAUvu4YSxXrVgw==}
@@ -2075,6 +2053,27 @@ packages:
       '@types/yargs-parser': 21.0.3
     dev: true
 
+  /@wizdy/blaxel_core@0.2.1-dev4-1(@hey-api/openapi-ts@0.67.3):
+    resolution: {integrity: sha512-PROvkk7UY+B8cImQxFBnq+tdCS285sq7TkuWKHXKfMjjET3kz4WzHrRq+pNbnBjfHetFy3UIwkOmhlk+IEKe8g==}
+    engines: {node: '>=18'}
+    dependencies:
+      '@hey-api/client-fetch': 0.10.0(@hey-api/openapi-ts@0.67.3)
+      '@modelcontextprotocol/sdk': 1.11.1
+      crypto: 1.0.1
+      dotenv: 16.5.0
+      jwt-decode: 4.0.0
+      toml: 3.0.0
+      uuid: 11.1.0
+      ws: 8.18.2
+      yaml: 2.7.1
+      zod: 3.24.4
+    transitivePeerDependencies:
+      - '@hey-api/openapi-ts'
+      - bufferutil
+      - supports-color
+      - utf-8-validate
+    dev: false
+
   /@wizdy/typescript-sdk@1.1.2:
     resolution: {integrity: sha512-RQV+qzTqyZpcMrdd+iHahGnCEn3C3BUNIQNt/wf/oQ/Ei46FNYMO7B05gOKSCByERq5Oul5hoTdnUFkSafFfHg==}
     dependencies:
@@ -2453,6 +2452,7 @@ packages:
       string-width: 4.2.3
       strip-ansi: 6.0.1
       wrap-ansi: 7.0.0
+    dev: true
 
   /co@4.6.0:
     resolution: {integrity: sha512-QVb0dM5HvG+uaxitm8wONl7jltx8dqhfU33DcqtOZcLSVIKSDDLDi7+0LbAKiyI8hD9u42m2YxXSkMGWThaecQ==}
@@ -2690,6 +2690,7 @@ packages:
   /escalade@3.2.0:
     resolution: {integrity: sha512-WUj2qlxaQtO4g6Pq5c29GTcWGDyd8itL8zTlipgECz3JesAiiOKotd8JU6otB3PACgG6xkJUyVhboMS+bje/jA==}
     engines: {node: '>=6'}
+    dev: true
 
   /escape-html@1.0.3:
     resolution: {integrity: sha512-NiSupZ4OeuGwr68lGIeym/ksIZMJodUGOSCZ/FSnTxcrekbvqrgdUxlJOMpijaKZVjAJrWrGs/6Jy8OMuyj9ow==}
@@ -2898,6 +2899,7 @@ packages:
   /get-caller-file@2.0.5:
     resolution: {integrity: sha512-DyFP3BM/3YHTQOCUL/w0OZHR0lpKeGrxotcHWcqNEdnltqFwXVfhEBQ94eIo34AfQpo0rGki4cyIiftY06h2Fg==}
     engines: {node: 6.* || 8.* || >= 10.*}
+    dev: true
 
   /get-intrinsic@1.3.0:
     resolution: {integrity: sha512-9fSjSaos/fRIVIp+xSJlE6lfwhES7LNtKaCBIamHsjr2na1BiABJPo0mOjjz8GJDURarmCPGqaiVg5mfjb98CQ==}
@@ -4123,6 +4125,7 @@ packages:
   /require-directory@2.1.1:
     resolution: {integrity: sha512-fGxEI7+wsG9xrvdjsrlmL22OMTTiHRwAMroiEeMgq8gzoLC/PQr7RsRDSTLUg/bZAZtF+TVIkHc6/4RIKrui+Q==}
     engines: {node: '>=0.10.0'}
+    dev: true
 
   /resolve-cwd@3.0.0:
     resolution: {integrity: sha512-OrZaX2Mb+rJCpH/6CpSqt9xFVpN++x01XnN2ie9g6P5/3xelLAkXWVADpdz1IHD/KFfEXyE6V0U01OQ3UO2rEg==}
@@ -4717,6 +4720,7 @@ packages:
   /y18n@5.0.8:
     resolution: {integrity: sha512-0pfFzegeDWJHJIAmTLRP2DwHjdF5s7jo9tuztdQxAhINCdvS+3nGINqPd00AphqJR/0LhANUS6/+7SCb98YOfA==}
     engines: {node: '>=10'}
+    dev: true
 
   /yallist@3.1.1:
     resolution: {integrity: sha512-a4UGQaWPH59mOXUYnAG2ewncQS4i4F43Tv3JoAM+s2VDAmS9NsK8GpDMLrCHPksFT7h3K6TOoUNn2pb7RoXx4g==}
@@ -4747,6 +4751,7 @@ packages:
       string-width: 4.2.3
       y18n: 5.0.8
       yargs-parser: 21.1.1
+    dev: true
 
   /yn@3.1.1:
     resolution: {integrity: sha512-Ux4ygGWsu2c7isFWe8Yu1YluJmqVhxqK2cLXNQA5AcC3QfbGNpM7fu0Y8b/z16pXLnFxZYvWhd3fhBY9DLmC6Q==}
