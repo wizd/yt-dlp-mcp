@@ -212,21 +212,21 @@ const server = new McpServer(
 server.server.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
     tools: [
-      {
-        name: "echo_tool",
-        description:
-          "Echoes back the input text. Useful for testing connectivity.",
-        inputSchema: {
-          type: "object",
-          properties: {
-            text_to_echo: {
-              type: "string",
-              description: "The text to echo back.",
-            },
-          },
-          required: ["text_to_echo"],
-        },
-      },
+      // {
+      //   name: "echo_tool",
+      //   description:
+      //     "Echoes back the input text. Useful for testing connectivity.",
+      //   inputSchema: {
+      //     type: "object",
+      //     properties: {
+      //       text_to_echo: {
+      //         type: "string",
+      //         description: "The text to echo back.",
+      //       },
+      //     },
+      //     required: ["text_to_echo"],
+      //   },
+      // },
       /*      {
         name: "list_subtitle_languages",
         description:
@@ -1135,6 +1135,14 @@ async function runServer() {
     app.use(express.json());
 
     const httpServer = createServer(app);
+    // Set a longer timeout for the HTTP server to handle long-running tool calls
+    httpServer.timeout = 30 * 60 * 1000; // 30 minutes in milliseconds
+    console.log(
+      `[HTTP] Server timeout set to ${
+        httpServer.timeout / (60 * 1000)
+      } minutes.`
+    );
+
     initStreamingHttp(app, server);
 
     app.get("/download/:filename", (req: Request, res: Response) => {
