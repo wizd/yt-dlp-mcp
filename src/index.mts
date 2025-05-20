@@ -849,99 +849,78 @@ async function initStreamingHttp(app: express.Application, server: McpServer) {
     let transport: StreamableHTTPServerTransport | undefined = clientSessionId
       ? transports.streamable[clientSessionId]
       : undefined;
-    let sessionIdToUse: string; // This will be the definitive session ID for this transport lifecycle
 
     if (!transport) {
-      sessionIdToUse = clientSessionId || randomUUID();
+      const intendedSessionId = clientSessionId || randomUUID();
       console.log(
         `[MCP-HTTP] No active transport for session ${
           clientSessionId || "(new)"
-        }. Creating new transport with ID ${sessionIdToUse}.`
+        }. Creating new transport with intended ID ${intendedSessionId}.`
       );
 
       const newStreamTransport = new StreamableHTTPServerTransport({
-        sessionIdGenerator: () => sessionIdToUse,
+        sessionIdGenerator: () => intendedSessionId,
+        onsessioninitialized: (actualSessionId) => {
+          console.log(
+            `[MCP-HTTP] Session initialized by transport. Actual ID: ${actualSessionId}. (Intended ID was: ${intendedSessionId}). Storing transport.`
+          );
+
+          if (
+            transports.streamable[actualSessionId] &&
+            transports.streamable[actualSessionId] !== newStreamTransport
+          ) {
+            console.warn(
+              `[MCP-HTTP] Critical: Session ID ${actualSessionId} (from transport) was already in use by a different transport instance. Overwriting. This may indicate a problem.`
+            );
+          }
+
+          transports.streamable[actualSessionId] = newStreamTransport;
+          console.log(
+            `[MCP-HTTP] New transport instance for session ${actualSessionId} stored in map.`
+          );
+
+          newStreamTransport.onclose = () => {
+            delete transports.streamable[actualSessionId];
+            console.log(
+              `[MCP-HTTP] Streamable transport for session ${actualSessionId} closed and removed from map.`
+            );
+          };
+        },
       });
-
-      if (!newStreamTransport.sessionId) {
-        console.error(
-          `[MCP-HTTP] FATAL: StreamableHTTPServerTransport did not set its own sessionId after construction. Intended ID was ${sessionIdToUse}.`
-        );
-        res.status(500).json({
-          jsonrpc: "2.0",
-          error: {
-            code: -32003,
-            message: "Server error: Transport ID initialization failed",
-          },
-          id: (req.body as any)?.id || null,
-        });
-        return;
-      }
-
-      if (newStreamTransport.sessionId !== sessionIdToUse) {
-        console.warn(
-          `[MCP-HTTP] Session ID discrepancy: Intended ${sessionIdToUse}, but transport self-identified as ${newStreamTransport.sessionId}. Using transport's ID.`
-        );
-        sessionIdToUse = newStreamTransport.sessionId;
-      }
-
-      transports.streamable[sessionIdToUse] = newStreamTransport;
-      console.log(
-        `[MCP-HTTP] New transport instance for session ${sessionIdToUse} stored in map.`
-      );
-
-      newStreamTransport.onclose = () => {
-        delete transports.streamable[sessionIdToUse];
-        console.log(
-          `[MCP-HTTP] Streamable transport for session ${sessionIdToUse} closed and removed from map.`
-        );
-      };
 
       transport = newStreamTransport;
 
       try {
         console.log(
-          `[MCP-HTTP] Connecting new streamable transport for session ${transport.sessionId} to McpServer.`
+          `[MCP-HTTP] Connecting new streamable transport (intended session ID: ${intendedSessionId}) to McpServer.`
         );
         await server.connect(transport);
         console.log(
-          `[MCP-HTTP] Streamable transport for session ${transport.sessionId} connected successfully.`
+          `[MCP-HTTP] Streamable transport (intended session ID: ${intendedSessionId}) connection process to McpServer completed.`
         );
       } catch (error) {
         const RpcError = {
           jsonrpc: "2.0",
           error: {
             code: -32001,
-            message: "Server error: Could not connect new transport",
+            message:
+              "Server error: Could not connect new transport to McpServer",
           },
           id: (req.body as any)?.id || null,
         };
         console.error(
-          `[MCP-HTTP] Failed to connect new streamable transport for session ${
-            transport.sessionId
-          }: ${error instanceof Error ? error.message : String(error)}`,
+          `[MCP-HTTP] Failed to connect new streamable transport (intended session ID: ${intendedSessionId}) to McpServer: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
           RpcError
         );
-
-        delete transports.streamable[sessionIdToUse];
-        if (typeof (transport as any).close === "function") {
-          try {
-            (transport as any).close();
-          } catch (closeError) {
-            console.warn(
-              `[MCP-HTTP] Error trying to explicitly close transport after connection failure: ${closeError}`
-            );
-          }
-        }
         res.status(500).json(RpcError);
         return;
       }
     } else {
       console.log(
-        `[MCP-HTTP] Reusing existing active transport for session ${clientSessionId}.`
+        `[MCP-HTTP] Reusing existing active transport for session ${clientSessionId}. Current transport session ID: ${transport.sessionId}`
       );
-      // We assume if it's in the map, it's meant to be active.
-      // The onclose handler is responsible for removing it if it's truly closed.
     }
 
     if (!transport) {
@@ -949,12 +928,14 @@ async function initStreamingHttp(app: express.Application, server: McpServer) {
         jsonrpc: "2.0",
         error: {
           code: -32002,
-          message: "Server error: Transport resolution failed unexpectedly",
+          message:
+            "Server error: Transport resolution failed unexpectedly before handling request.",
         },
         id: (req.body as any)?.id || null,
       };
       console.error(
-        "[MCP-HTTP] Transport is unexpectedly null before handleRequest.",
+        "[MCP-HTTP] Transport is unexpectedly null before handleRequest. Client session ID from header was: " +
+          clientSessionId,
         RpcError
       );
       res.status(500).json(RpcError);
@@ -962,7 +943,7 @@ async function initStreamingHttp(app: express.Application, server: McpServer) {
     }
 
     console.log(
-      `[MCP-HTTP] Handling POST /mcp request for session ${
+      `[MCP-HTTP] Handling POST /mcp request for session. Client Header Session ID: ${clientSessionId}, Transport Current Session ID: ${
         transport.sessionId
       }. Body ID: ${(req.body as any)?.id}`
     );
