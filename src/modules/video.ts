@@ -20,6 +20,7 @@ export interface DownloadResult {
   videoFilename?: string;
   metaFilename?: string;
   downloadUrl?: string;
+  originalUrl?: string;
 }
 
 /**
@@ -182,6 +183,7 @@ export async function downloadVideo(
       videoFilename: baseVideoFilename,
       metaFilename: metaFilename,
       downloadUrl: downloadUrl,
+      originalUrl: url,
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -194,12 +196,14 @@ export async function downloadVideo(
       return JSON.stringify({
         success: false,
         message: errorMessage, // Already includes "Download failed: " prefix
+        originalUrl: url,
       });
     }
     // For other errors (e.g., URL validation, setup issues)
     return JSON.stringify({
       success: false,
       message: `Operation failed: ${errorMessage}`,
+      originalUrl: url,
     });
   }
 } 

@@ -17,7 +17,6 @@ import { CONFIG } from "./config.js";
 import { _spawnPromise, safeCleanup } from "./modules/utils.js";
 import { downloadVideo } from "./modules/video.js";
 import { downloadAudio } from "./modules/audio.js";
-import { executeFFmpegCommand } from "./modules/ffmpeg_tool.js";
 import { RestServerTransport } from "@wizdy/typescript-sdk/server/rest.js";
 import { getParamValue } from "@wizdy/typescript-sdk/utils/index.js";
 import { Request, Response } from "express";
@@ -27,7 +26,6 @@ import { speechToText } from "./modules/speech/stt.mjs";
 import { generateSrtSubtitles } from "./modules/speech/stt.mjs";
 import { embedSubtitles } from "./modules/subtitles.mjs";
 import { textToSpeech } from "./modules/speech/tts.mjs";
-import { executeWhisperxCommand } from "./modules/whisperx_tool.mjs";
 import { readFileContent, writeFileContent } from "./modules/file_io.mjs";
 import { executeFFprobeCommand } from "./modules/ffprobe_tool.js";
 import { createServer } from "http";
@@ -37,6 +35,84 @@ import { listSubtitles } from "./modules/subtitle.js";
 import { downloadSubtitles } from "./modules/subtitle.js";
 
 const VERSION = "0.6.27";
+
+/**
+ * Validates that the provided filename is a simple filename string without path components or traversal attempts.
+ * Throws an error if validation fails.
+ * @param filename The filename to validate.
+ * @param friendlyName The user-facing name of the parameter (e.g., "input filename").
+ * @returns The validated filename.
+ */
+function validateIsSafeBasename(
+  filename: string | undefined,
+  friendlyName: string = "filename"
+): string {
+  if (typeof filename !== "string" || filename.trim() === "") {
+    throw new Error(`${friendlyName} must be a non-empty string.`);
+  }
+  // Normalize to catch subtle ".." variations if any slip past basic checks
+  const normalizedFilename = path.normalize(filename);
+
+  if (
+    normalizedFilename.includes("..") ||
+    path.isAbsolute(normalizedFilename)
+  ) {
+    throw new Error(
+      `Invalid ${friendlyName} '${filename}': '..' and absolute paths are not allowed.`
+    );
+  }
+  const basename = path.basename(normalizedFilename);
+  if (basename !== normalizedFilename) {
+    throw new Error(
+      `Invalid ${friendlyName} '${filename}': Path components (e.g., '/') are not allowed. Provide a direct filename only.`
+    );
+  }
+  return normalizedFilename;
+}
+
+/**
+ * Validates that the provided relativePath is safe for use within a base directory.
+ * It checks for '..' and absolute paths. Subdirectories can be allowed or disallowed.
+ * Throws an error if validation fails.
+ * Note: The consuming function is still responsible for resolving against the actual base directory
+ * and ensuring the final path is within that base.
+ * @param relativePath The relative path to validate.
+ * @param allowSubdirectories Whether to allow slashes for subdirectories.
+ * @param friendlyName The user-facing name of the parameter (e.g., "target path").
+ * @returns The validated relative path.
+ */
+function validateIsSafeRelativePath(
+  relativePath: string | undefined,
+  allowSubdirectories: boolean,
+  friendlyName: string = "path"
+): string {
+  if (typeof relativePath !== "string" || relativePath.trim() === "") {
+    throw new Error(`${friendlyName} must be a non-empty string.`);
+  }
+  const normalizedPath = path.normalize(relativePath);
+
+  if (normalizedPath.includes("..") || path.isAbsolute(normalizedPath)) {
+    throw new Error(
+      `Invalid ${friendlyName} '${relativePath}': '..' and absolute paths are not allowed.`
+    );
+  }
+  if (
+    !allowSubdirectories &&
+    (normalizedPath.includes(path.sep) || normalizedPath.includes("/"))
+  ) {
+    throw new Error(
+      `Invalid ${friendlyName} '${relativePath}': Subdirectories are not allowed for this operation. Provide a direct filename.`
+    );
+  }
+  // Prevent starting with a slash if it's meant to be relative, though path.isAbsolute should catch most.
+  // path.normalize will remove leading './' but not a leading '/' on its own if it's not otherwise absolute.
+  if (normalizedPath.startsWith(path.sep) || normalizedPath.startsWith("/")) {
+    throw new Error(
+      `Invalid ${friendlyName} '${relativePath}': Path should not start with a slash if relative.`
+    );
+  }
+  return normalizedPath;
+}
 
 const mode = getParamValue("MODE") || "stdio";
 const port = getParamValue("PORT") || 9591;
@@ -329,7 +405,7 @@ server.server.setRequestHandler(ListToolsRequestSchema, async () => {
       {
         name: "execute_ffprobe_command",
         description:
-          "执行用户提供的 ffprobe 命令参数字符串。命令将在默认的视频下载目录中执行。用户需要提供 ffprobe 命令本身之后的所有参数作为单个字符串。例如：'-v quiet -print_format json -show_format -show_streams video.mp4'。请确保输入文件名正确，如果不是绝对路径，则它们是相对于下载目录的。",
+          "执行用户提供的 ffprobe 命令参数字符串。命令将在默认的视频下载目录中执行。用户需要提供 ffprobe 命令本身之后的所有参数作为单个字符串。例如：'-v quiet -print_format json -show_format -show_streams video.mp4'。请确保输入文件名正确，如果不是绝对路径，则它们是相对于下载目录的。警告：不正确的参数可能导致命令注入漏洞，请确保参数字符串经过仔细审查，避免使用未经验证的用户输入直接构造参数，并对特殊字符进行适当处理。",
         inputSchema: {
           type: "object",
           properties: {
@@ -477,16 +553,17 @@ server.server.setRequestHandler(
           isError: true,
         };
       }
-      const localVideoPath = path.join(CONFIG.file.downloadsDir, args.filename);
-      return handleToolExecution(
-        () =>
-          HostVideoToR2(
-            localVideoPath,
-            args.tenantId as string,
-            args.customVideoId
-          ),
-        "Error publishing video"
-      );
+      return handleToolExecution(() => {
+        const validatedFilename = validateIsSafeBasename(
+          args.filename,
+          "filename"
+        );
+        return HostVideoToR2(
+          validatedFilename,
+          args.tenantId as string,
+          args.customVideoId
+        );
+      }, "Error publishing video");
     } else if (toolName === "execute_ffmpeg_command") {
       if (typeof args.ffmpeg_args !== "string") {
         return {
@@ -496,10 +573,13 @@ server.server.setRequestHandler(
           isError: true,
         };
       }
-      return handleToolExecution(
-        () => executeFFmpegCommand(args.ffmpeg_args as string),
-        "Error executing FFmpeg command"
-      );
+      return handleToolExecution(() => {
+        const validatedFilename = validateIsSafeBasename(
+          args.filename,
+          "filename"
+        );
+        return speechToText(validatedFilename, args.language);
+      }, "Error performing speech-to-text");
     } else if (toolName === "speech_to_text") {
       if (typeof args.filename !== "string") {
         return {
@@ -543,74 +623,109 @@ server.server.setRequestHandler(
         };
       }
 
-      const inputVideoFilename = args.input_filename;
-      const outputVideoFilename = args.output_filename;
       const language = args.language;
 
       return handleToolExecution(async () => {
-        const downloadsDir = CONFIG.file.downloadsDir;
-        const inputVideoPath = path.join(downloadsDir, inputVideoFilename);
-
-        if (!fs.existsSync(inputVideoPath)) {
-          throw new Error(`Input video file not found: ${inputVideoPath}`);
+        const validatedInputBasename = validateIsSafeBasename(
+          args.input_filename,
+          "input_filename"
+        );
+        let validatedOutputBasename: string | undefined;
+        if (args.output_filename) {
+          validatedOutputBasename = validateIsSafeBasename(
+            args.output_filename,
+            "output_filename (optional)"
+          );
         }
 
-        console.log(`Starting SRT generation for ${inputVideoFilename}`);
+        const downloadsDir = CONFIG.file.downloadsDir;
+        const resolvedDownloadsDir = path.resolve(downloadsDir);
+
+        console.log(`Starting SRT generation for ${validatedInputBasename}`);
         const srtPath = await generateSrtSubtitles(
-          inputVideoFilename,
+          validatedInputBasename,
           language
         );
         console.log(`SRT file generated at: ${srtPath}`);
 
-        // 2. Determine output video path
-        let finalOutputVideoPath: string;
-        const inputBasename = path.basename(
-          inputVideoFilename,
-          path.extname(inputVideoFilename)
-        );
-        // Always output as MP4 when embedding subtitles with libx264 for compatibility
-        const outputExt = ".mp4";
-        const defaultOutputFilename = `${inputBasename}_subtitled${outputExt}`;
-
-        if (outputVideoFilename) {
-          // If user specified output, ensure it has .mp4 extension for consistency
-          // We prioritize compatibility by enforcing MP4 output here.
-          const userOutputBasename = path.basename(
-            outputVideoFilename,
-            path.extname(outputVideoFilename)
+        const resolvedSrtPath = path.resolve(srtPath);
+        const tempDir = path.resolve(os.tmpdir());
+        if (
+          !resolvedSrtPath.startsWith(resolvedDownloadsDir) &&
+          !resolvedSrtPath.startsWith(tempDir)
+        ) {
+          throw new Error(
+            `SRT generation resulted in an unsafe or unexpected path: ${srtPath}. It must be within ${resolvedDownloadsDir} or ${tempDir}.`
           );
-          finalOutputVideoPath = path.join(
-            downloadsDir,
-            `${userOutputBasename}${outputExt}`
+        }
+        if (!fs.existsSync(resolvedSrtPath)) {
+          throw new Error(
+            `Generated SRT file not found at path: ${resolvedSrtPath}`
           );
-          console.warn(
-            `User-specified output filename modified to ensure .mp4 extension: ${path.basename(
-              finalOutputVideoPath
-            )}`
-          );
-        } else {
-          finalOutputVideoPath = path.join(downloadsDir, defaultOutputFilename);
         }
 
-        // 3. Embed subtitles
-        console.log(
-          `Embedding subtitles from ${srtPath} into ${inputVideoPath}, output to ${finalOutputVideoPath}`
+        const inputVideoPath = path.resolve(
+          downloadsDir,
+          validatedInputBasename
         );
-        await embedSubtitles(inputVideoPath, srtPath, finalOutputVideoPath);
+        if (!inputVideoPath.startsWith(resolvedDownloadsDir)) {
+          throw new Error(
+            `Constructed input video path is outside the download directory: ${inputVideoPath}`
+          );
+        }
+        if (!fs.existsSync(inputVideoPath)) {
+          throw new Error(`Input video file not found: ${inputVideoPath}`);
+        }
 
-        // 4. Cleanup SRT file
+        let finalOutputVideoPath: string;
+        const inputBasenameNoExt = path.basename(
+          validatedInputBasename,
+          path.extname(validatedInputBasename)
+        );
+        const outputExt = ".mp4";
+
+        if (validatedOutputBasename) {
+          const outputNamePart = path.basename(
+            validatedOutputBasename,
+            path.extname(validatedOutputBasename)
+          );
+          finalOutputVideoPath = path.resolve(
+            downloadsDir,
+            `${outputNamePart}${outputExt}`
+          );
+        } else {
+          finalOutputVideoPath = path.resolve(
+            downloadsDir,
+            `${inputBasenameNoExt}_subtitled${outputExt}`
+          );
+        }
+
+        if (!finalOutputVideoPath.startsWith(resolvedDownloadsDir)) {
+          throw new Error(
+            `Calculated output video path is outside the download directory: ${finalOutputVideoPath}`
+          );
+        }
+
+        console.log(
+          `Embedding subtitles from ${resolvedSrtPath} into ${inputVideoPath}, output to ${finalOutputVideoPath}`
+        );
+        await embedSubtitles(
+          inputVideoPath,
+          resolvedSrtPath,
+          finalOutputVideoPath
+        );
+
         try {
-          await fs.promises.unlink(srtPath);
-          console.log(`Cleaned up temporary SRT file: ${srtPath}`);
+          await fs.promises.unlink(resolvedSrtPath);
+          console.log(`Cleaned up temporary SRT file: ${resolvedSrtPath}`);
         } catch (cleanupError) {
           console.warn(
-            `Failed to clean up temporary SRT file ${srtPath}: ${cleanupError}`
+            `Failed to clean up temporary SRT file ${resolvedSrtPath}: ${cleanupError}`
           );
         }
 
         const outputBaseName = path.basename(finalOutputVideoPath);
-        return `Subtitles successfully added. Output video: ${outputBaseName}. \
-Access it via URL: ${CONFIG.file.hostingUrlBase}/${outputBaseName}`;
+        return `Subtitles successfully added. Output video: ${outputBaseName}. Access it via URL: ${CONFIG.file.hostingUrlBase}/${outputBaseName}`;
       }, "Error adding subtitles to video");
     } else if (toolName === "execute_whisperx_command") {
       if (typeof args.whisperx_args !== "string") {
@@ -624,10 +739,14 @@ Access it via URL: ${CONFIG.file.hostingUrlBase}/${outputBaseName}`;
           isError: true,
         };
       }
-      return handleToolExecution(
-        () => executeWhisperxCommand(args.whisperx_args as string),
-        "Error executing WhisperX command"
-      );
+      return handleToolExecution(() => {
+        const validatedPath = validateIsSafeRelativePath(
+          args.filename,
+          true,
+          "filename"
+        );
+        return readFileContent(validatedPath);
+      }, "Error reading file");
     } else if (toolName === "execute_ffprobe_command") {
       if (typeof args.ffprobe_args !== "string") {
         return {
@@ -669,10 +788,14 @@ Access it via URL: ${CONFIG.file.hostingUrlBase}/${outputBaseName}`;
           isError: true,
         };
       }
-      return handleToolExecution(
-        () => writeFileContent(args.filename as string, args.content as string),
-        "Error writing file"
-      );
+      return handleToolExecution(() => {
+        const validatedPath = validateIsSafeRelativePath(
+          args.filename,
+          true,
+          "filename"
+        );
+        return writeFileContent(validatedPath, args.content as string);
+      }, "Error writing file");
     } else {
       return {
         content: [{ type: "text", text: `Unknown tool: ${toolName}` }],
@@ -803,30 +926,60 @@ async function runServer() {
       "get",
       "/download/:filename",
       (req: Request, res: Response) => {
-        const filename = req.params.filename;
-        if (!filename) {
-          res.status(400).send("Filename is required");
-          return;
-        }
-        const sanitizedFilename = path.basename(filename);
-        if (sanitizedFilename !== filename) {
-          res.status(400).send("Invalid filename");
-          return;
-        }
-        const downloadsDir = path.join(os.homedir(), "Downloads");
-        const filePath = path.join(downloadsDir, sanitizedFilename);
+        try {
+          const userProvidedFilename = validateIsSafeBasename(
+            req.params.filename,
+            "requested filename"
+          );
 
-        if (fs.existsSync(filePath)) {
-          res.download(filePath, sanitizedFilename, (err) => {
-            if (err) {
-              console.error("Error downloading file:", err);
-              if (!res.headersSent) {
-                res.status(500).send("Error downloading file");
+          const downloadsDir = CONFIG.file.downloadsDir; // Use configured downloads directory
+          const requestedFilePath = path.join(
+            downloadsDir,
+            userProvidedFilename
+          );
+
+          // Final security check: resolve paths and ensure it's within downloadsDir
+          const resolvedDownloadsDir = path.resolve(downloadsDir);
+          const resolvedRequestedFilePath = path.resolve(requestedFilePath);
+
+          if (!resolvedRequestedFilePath.startsWith(resolvedDownloadsDir)) {
+            // This case should ideally not be reached if validateIsSafeBasename is correct
+            // and userProvidedFilename has no path components.
+            res
+              .status(403)
+              .send("Forbidden: Access to this path is not allowed.");
+            return;
+          }
+
+          if (fs.existsSync(resolvedRequestedFilePath)) {
+            res.download(
+              resolvedRequestedFilePath,
+              userProvidedFilename,
+              (err) => {
+                if (err) {
+                  console.error("Error downloading file:", err);
+                  if (!res.headersSent) {
+                    // Check for common file access errors
+                    if (
+                      (err as NodeJS.ErrnoException).code === "ENOENT" ||
+                      (err as NodeJS.ErrnoException).code === "EACCES"
+                    ) {
+                      res.status(404).send("File not found or access denied.");
+                    } else {
+                      res.status(500).send("Error downloading file");
+                    }
+                  }
+                }
               }
-            }
-          });
-        } else {
-          res.status(404).send("File not found");
+            );
+          } else {
+            res.status(404).send("File not found");
+          }
+        } catch (error) {
+          // Catch errors from validateIsSafeBasename or other synchronous issues
+          const errorMessage =
+            error instanceof Error ? error.message : "Invalid request";
+          res.status(400).send(errorMessage);
         }
       }
     );
@@ -845,8 +998,61 @@ async function runServer() {
     app.use(express.json());
 
     const httpServer = createServer(app);
-
     initStreamingHttp(app, server);
+
+    app.get("/download/:filename", (req: Request, res: Response) => {
+      try {
+        const userProvidedFilename = validateIsSafeBasename(
+          req.params.filename,
+          "requested filename"
+        );
+
+        const downloadsDir = CONFIG.file.downloadsDir; // Use configured downloads directory
+        const requestedFilePath = path.join(downloadsDir, userProvidedFilename);
+
+        // Final security check: resolve paths and ensure it's within downloadsDir
+        const resolvedDownloadsDir = path.resolve(downloadsDir);
+        const resolvedRequestedFilePath = path.resolve(requestedFilePath);
+
+        if (!resolvedRequestedFilePath.startsWith(resolvedDownloadsDir)) {
+          // This case should ideally not be reached if validateIsSafeBasename is correct
+          res
+            .status(403)
+            .send("Forbidden: Access to this path is not allowed.");
+          return;
+        }
+
+        if (fs.existsSync(resolvedRequestedFilePath)) {
+          res.download(
+            resolvedRequestedFilePath,
+            userProvidedFilename,
+            (err) => {
+              if (err) {
+                console.error("Error downloading file:", err);
+                if (!res.headersSent) {
+                  // Check for common file access errors
+                  if (
+                    (err as NodeJS.ErrnoException).code === "ENOENT" ||
+                    (err as NodeJS.ErrnoException).code === "EACCES"
+                  ) {
+                    res.status(404).send("File not found or access denied.");
+                  } else {
+                    res.status(500).send("Error downloading file");
+                  }
+                }
+              }
+            }
+          );
+        } else {
+          res.status(404).send("File not found");
+        }
+      } catch (error) {
+        // Catch errors from validateIsSafeBasename or other synchronous issues
+        const errorMessage =
+          error instanceof Error ? error.message : "Invalid request";
+        res.status(400).send(errorMessage);
+      }
+    });
 
     const wsTransport = new BlaxelMcpServerTransport(httpServer);
     try {
