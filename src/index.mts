@@ -4,7 +4,6 @@ import express from "express";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
-import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
@@ -213,6 +212,21 @@ const server = new McpServer(
 server.server.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
     tools: [
+      {
+        name: "echo_tool",
+        description:
+          "Echoes back the input text. Useful for testing connectivity.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            text_to_echo: {
+              type: "string",
+              description: "The text to echo back.",
+            },
+          },
+          required: ["text_to_echo"],
+        },
+      },
       /*      {
         name: "list_subtitle_languages",
         description:
@@ -505,9 +519,26 @@ server.server.setRequestHandler(
       whisperx_args?: string;
       content?: string;
       ffprobe_args?: string;
+      text_to_echo?: string;
     };
 
-    if (toolName === "list_subtitle_languages") {
+    if (toolName === "echo_tool") {
+      if (typeof args.text_to_echo !== "string") {
+        return {
+          content: [
+            {
+              type: "text",
+              text: "Error: text_to_echo must be a string.",
+            },
+          ],
+          isError: true,
+        };
+      }
+      return handleToolExecution(async () => {
+        console.log(`[ECHO_TOOL] Echoing: ${args.text_to_echo}`);
+        return `Echo: ${args.text_to_echo}`;
+      }, "Error in echo_tool");
+    } else if (toolName === "list_subtitle_languages") {
       return handleToolExecution(
         () => listSubtitles(args.url as string),
         "Error listing subtitle languages"
@@ -814,48 +845,127 @@ async function initStreamingHttp(app: express.Application, server: McpServer) {
 
   // Handle POST requests for client-to-server communication
   app.post("/mcp", async (req, res) => {
-    // Check for existing session ID
-    const sessionId = req.headers["mcp-session-id"] as string | undefined;
-    let transport: StreamableHTTPServerTransport;
+    const clientSessionId = req.headers["mcp-session-id"] as string | undefined;
+    let transport: StreamableHTTPServerTransport | undefined = clientSessionId
+      ? transports.streamable[clientSessionId]
+      : undefined;
+    let sessionIdToUse: string; // This will be the definitive session ID for this transport lifecycle
 
-    if (sessionId && transports.streamable[sessionId]) {
-      // Reuse existing transport
-      transport = transports.streamable[sessionId];
-    } else if (!sessionId && isInitializeRequest(req.body)) {
-      // New initialization request
-      transport = new StreamableHTTPServerTransport({
-        sessionIdGenerator: () => randomUUID(),
-        onsessioninitialized: (sessionId) => {
-          // Store the transport by session ID
-          transports.streamable[sessionId] = transport;
-        },
+    if (!transport) {
+      sessionIdToUse = clientSessionId || randomUUID();
+      console.log(
+        `[MCP-HTTP] No active transport for session ${
+          clientSessionId || "(new)"
+        }. Creating new transport with ID ${sessionIdToUse}.`
+      );
+
+      const newStreamTransport = new StreamableHTTPServerTransport({
+        sessionIdGenerator: () => sessionIdToUse,
       });
 
-      // Clean up transport when closed
-      transport.onclose = () => {
-        if (transport.sessionId) {
-          delete transports.streamable[transport.sessionId];
-        }
+      if (!newStreamTransport.sessionId) {
+        console.error(
+          `[MCP-HTTP] FATAL: StreamableHTTPServerTransport did not set its own sessionId after construction. Intended ID was ${sessionIdToUse}.`
+        );
+        res.status(500).json({
+          jsonrpc: "2.0",
+          error: {
+            code: -32003,
+            message: "Server error: Transport ID initialization failed",
+          },
+          id: (req.body as any)?.id || null,
+        });
+        return;
+      }
+
+      if (newStreamTransport.sessionId !== sessionIdToUse) {
+        console.warn(
+          `[MCP-HTTP] Session ID discrepancy: Intended ${sessionIdToUse}, but transport self-identified as ${newStreamTransport.sessionId}. Using transport's ID.`
+        );
+        sessionIdToUse = newStreamTransport.sessionId;
+      }
+
+      transports.streamable[sessionIdToUse] = newStreamTransport;
+      console.log(
+        `[MCP-HTTP] New transport instance for session ${sessionIdToUse} stored in map.`
+      );
+
+      newStreamTransport.onclose = () => {
+        delete transports.streamable[sessionIdToUse];
+        console.log(
+          `[MCP-HTTP] Streamable transport for session ${sessionIdToUse} closed and removed from map.`
+        );
       };
 
-      // ... set up server resources, tools, and prompts ...
+      transport = newStreamTransport;
 
-      // Connect to the MCP server
-      await server.connect(transport);
+      try {
+        console.log(
+          `[MCP-HTTP] Connecting new streamable transport for session ${transport.sessionId} to McpServer.`
+        );
+        await server.connect(transport);
+        console.log(
+          `[MCP-HTTP] Streamable transport for session ${transport.sessionId} connected successfully.`
+        );
+      } catch (error) {
+        const RpcError = {
+          jsonrpc: "2.0",
+          error: {
+            code: -32001,
+            message: "Server error: Could not connect new transport",
+          },
+          id: (req.body as any)?.id || null,
+        };
+        console.error(
+          `[MCP-HTTP] Failed to connect new streamable transport for session ${
+            transport.sessionId
+          }: ${error instanceof Error ? error.message : String(error)}`,
+          RpcError
+        );
+
+        delete transports.streamable[sessionIdToUse];
+        if (typeof (transport as any).close === "function") {
+          try {
+            (transport as any).close();
+          } catch (closeError) {
+            console.warn(
+              `[MCP-HTTP] Error trying to explicitly close transport after connection failure: ${closeError}`
+            );
+          }
+        }
+        res.status(500).json(RpcError);
+        return;
+      }
     } else {
-      // Invalid request
-      res.status(400).json({
+      console.log(
+        `[MCP-HTTP] Reusing existing active transport for session ${clientSessionId}.`
+      );
+      // We assume if it's in the map, it's meant to be active.
+      // The onclose handler is responsible for removing it if it's truly closed.
+    }
+
+    if (!transport) {
+      const RpcError = {
         jsonrpc: "2.0",
         error: {
-          code: -32000,
-          message: "Bad Request: No valid session ID provided",
+          code: -32002,
+          message: "Server error: Transport resolution failed unexpectedly",
         },
-        id: null,
-      });
+        id: (req.body as any)?.id || null,
+      };
+      console.error(
+        "[MCP-HTTP] Transport is unexpectedly null before handleRequest.",
+        RpcError
+      );
+      res.status(500).json(RpcError);
       return;
     }
 
-    // Handle the request
+    console.log(
+      `[MCP-HTTP] Handling POST /mcp request for session ${
+        transport.sessionId
+      }. Body ID: ${(req.body as any)?.id}`
+    );
     await transport.handleRequest(req, res, req.body);
   });
 
@@ -881,16 +991,54 @@ async function initStreamingHttp(app: express.Application, server: McpServer) {
   app.delete("/mcp", handleSessionRequest);
 
   // Legacy SSE endpoint for older clients
-  app.get("/sse", async (_, res) => {
+  app.get("/sse", async (req, res) => {
+    console.log(
+      `[!!!SSE_TRIGGER!!!] Request to /sse received. Timestamp: ${Date.now()}`
+    );
+    console.log(
+      `[!!!SSE_TRIGGER!!!] Request details: method=${req.method}, originalUrl=${
+        req.originalUrl
+      }, ip=${req.ip}, headers=${JSON.stringify(req.headers)}`
+    );
+
     // Create SSE transport for legacy clients
     const transport = new SSEServerTransport("/messages", res);
     transports.sse[transport.sessionId] = transport;
+    console.log(
+      `[MCP-SSE] New SSE transport created for session ${transport.sessionId} and stored.`
+    );
 
     res.on("close", () => {
       delete transports.sse[transport.sessionId];
+      console.log(
+        `[MCP-SSE] SSE transport for session ${transport.sessionId} closed (client disconnected) and removed from map.`
+      );
+      // If McpServer needs explicit disconnect:
+      // server.disconnect(transport).catch(err => console.error(`Error disconnecting SSE transport: ${err}`));
     });
 
-    await server.connect(transport);
+    try {
+      console.log(
+        `[MCP-SSE] Connecting SSE transport for session ${transport.sessionId} to McpServer.`
+      );
+      await server.connect(transport);
+      console.log(
+        `[MCP-SSE] SSE transport for session ${transport.sessionId} connected successfully.`
+      );
+    } catch (error) {
+      console.error(
+        `[MCP-SSE] Failed to connect SSE transport for session ${
+          transport.sessionId
+        }: ${error instanceof Error ? error.message : String(error)}`
+      );
+      // Clean up if connection failed.
+      delete transports.sse[transport.sessionId];
+      // res.end() or similar might be needed if headers not sent.
+      // Check if response is writable before attempting to end it.
+      if (!res.writableEnded) {
+        res.status(500).send("Failed to establish SSE connection with server.");
+      }
+    }
   });
 
   // Legacy message endpoint for older clients
@@ -898,8 +1046,16 @@ async function initStreamingHttp(app: express.Application, server: McpServer) {
     const sessionId = req.query.sessionId as string;
     const transport = transports.sse[sessionId];
     if (transport) {
+      console.log(
+        `[MCP-SSE] Handling POST /messages for session ${sessionId}. Body ID: ${
+          (req.body as any)?.id
+        }`
+      );
       await transport.handlePostMessage(req, res, req.body);
     } else {
+      console.warn(
+        `[MCP-SSE] No SSE transport found for session ID ${sessionId} on POST /messages.`
+      );
       res.status(400).send("No transport found for sessionId");
     }
   });
