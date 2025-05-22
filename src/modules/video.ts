@@ -19,7 +19,7 @@ export interface DownloadResult {
   message: string;
   videoFilename?: string;
   metaFilename?: string;
-  downloadUrl?: string;
+  localDirectAccessUrl?: string;
   originalUrl?: string;
 }
 
@@ -171,10 +171,10 @@ export async function downloadVideo(
     const metaFilename =
       baseVideoFilename.substring(0, baseVideoFilename.lastIndexOf(".")) +
       ".info.json";
-    const downloadUrl = `${effectiveConfig.file.hostingUrlBase}/${baseVideoFilename}`;
+    const localDirectAccessUrl = `${effectiveConfig.file.hostingUrlBase}/${baseVideoFilename}`;
 
     console.log(
-      `Download successful. Video: ${baseVideoFilename}, Meta: ${metaFilename}, URL: ${downloadUrl}`
+      `Download successful. Video: ${baseVideoFilename}, Meta: ${metaFilename}, URL: ${localDirectAccessUrl}`
     );
 
     return JSON.stringify({
@@ -182,7 +182,7 @@ export async function downloadVideo(
       message: `Video successfully downloaded as ${baseVideoFilename}.`,
       videoFilename: baseVideoFilename,
       metaFilename: metaFilename,
-      downloadUrl: downloadUrl,
+      localDirectAccessUrl,
       originalUrl: url,
     });
   } catch (error) {
